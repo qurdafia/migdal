@@ -6,7 +6,7 @@ services:
     environment:
       - POSTGRES_DB=migdal_prod
       - POSTGRES_USER=migdal_user
-      - POSTGRES_PASSWORD=SecurePass123!
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
     env_file:
       - .env.prod
     restart: always
