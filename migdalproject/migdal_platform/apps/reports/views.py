@@ -118,7 +118,8 @@ class CategoryHealthReportView(APIView):
                     health_status,
                     f"{cpu}%" if cpu != "N/A" else "N/A",
                     f"{mem}%" if mem != "N/A" else "N/A",
-                    rec.timestamp.strftime("%Y-%m-%d %H:%M:%S") if rec else "N/A"
+                    timezone.localtime(rec.timestamp).strftime("%Y-%m-%d %H:%M:%S") if rec else "N/A"
+                    # rec.timestamp.strftime("%Y-%m-%d %H:%M:%S") if rec else "N/A"
                 ])
             return response
 
@@ -238,7 +239,8 @@ class DownloadReportView(APIView):
 
         context = {
             'report': report,
-            'generated_at': timezone.now().strftime('%Y-%m-%d %H:%M:%S'),
+            'generated_at': timezone.localtime(timezone.now()).strftime('%Y-%m-%d %H:%M:%S'),
+            # 'generated_at': timezone.now().strftime('%Y-%m-%d %H:%M:%S'),
             'ip_address': ip_address
         }
 

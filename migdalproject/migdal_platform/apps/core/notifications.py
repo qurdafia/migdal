@@ -48,7 +48,8 @@ def generate_global_csv(organization):
 
             cpu = f"{c_val}%" if c_val != 0 else "N/A"
             mem = f"{m_val}%" if m_val != 0 else "N/A"
-            ts = rec.timestamp.strftime("%Y-%m-%d %H:%M:%S")
+            ts = timezone.localtime(rec.timestamp).strftime("%Y-%m-%d %H:%M:%S")
+            # ts = rec.timestamp.strftime("%Y-%m-%d %H:%M:%S")
 
         writer.writerow([d.device_type.upper(), d.name, ip, health_status, cpu, mem, ts])
         
@@ -89,7 +90,8 @@ def send_consolidated_alerts(device_ids):
             print(f"📄 Rendering combined multi-page AI PDF...")
             context = {
                 'reports': report_objs,  # Notice this is plural now!
-                'generated_at': timezone.now().strftime('%Y-%m-%d %H:%M:%S')
+                'generated_at': timezone.localtime(timezone.now()).strftime('%Y-%m-%d %H:%M:%S')
+                # 'generated_at': timezone.now().strftime('%Y-%m-%d %H:%M:%S')
             }
             pdf_bytes = render_to_pdf('reports/consolidated_analysis_pdf.html', context)
 

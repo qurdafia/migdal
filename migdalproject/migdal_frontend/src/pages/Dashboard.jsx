@@ -217,18 +217,39 @@ const Dashboard = () => {
         const ext = type === 'pdf' ? 'pdf' : 'csv';
         const endpoint = type === 'pdf' ? 'download' : 'csv';
         try {
+            // ⚠️ REMOVED the start_date and end_date params since this is now a LIVE report!
             const res = await api.get(`/reports/category/${category}/${endpoint}/`, {
-                params: { start_date: startDate, end_date: endDate },
                 responseType: 'blob'
             });
             const url = window.URL.createObjectURL(new Blob([res.data]));
             const link = document.createElement('a');
             link.href = url;
-            link.setAttribute('download', `${category}_Report.${ext}`);
+            link.setAttribute('download', `${category}_Live_Report.${ext}`);
             document.body.appendChild(link);
             link.click();
-        } catch (e) { alert("Report failed"); }
+            link.parentNode.removeChild(link);
+        } catch (e) { 
+            console.error("Download Error:", e);
+            alert("Report failed. Check console for details."); 
+        }
     };
+
+    // const handleReportDownload = async (type) => {
+    //     const ext = type === 'pdf' ? 'pdf' : 'csv';
+    //     const endpoint = type === 'pdf' ? 'download' : 'csv';
+    //     try {
+    //         const res = await api.get(`/reports/category/${category}/${endpoint}/`, {
+    //             params: { start_date: startDate, end_date: endDate },
+    //             responseType: 'blob'
+    //         });
+    //         const url = window.URL.createObjectURL(new Blob([res.data]));
+    //         const link = document.createElement('a');
+    //         link.href = url;
+    //         link.setAttribute('download', `${category}_Report.${ext}`);
+    //         document.body.appendChild(link);
+    //         link.click();
+    //     } catch (e) { alert("Report failed"); }
+    // };
 
     const handleLogout = () => {
         localStorage.clear();
