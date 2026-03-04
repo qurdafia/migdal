@@ -1,6 +1,6 @@
 from django.contrib import admin
 from .models import DataSource, MetricDefinition, TelemetryRecord, EmailConfiguration
-
+from django import forms
 
 class MetricDefinitionInline(admin.TabularInline):
     """
@@ -42,12 +42,20 @@ class TelemetryRecordAdmin(admin.ModelAdmin):
         return False  # Disable the "Add" button (Data only comes from API)
 
 
+class EmailConfigurationForm(forms.ModelForm):
+    class Meta:
+        model = EmailConfiguration
+        fields = '__all__'
+        widgets = {
+            'smtp_password': forms.PasswordInput(render_value=True),
+        }
+
 @admin.register(EmailConfiguration)
 class EmailConfigurationAdmin(admin.ModelAdmin):
-    # What columns show up in the list view
+    form = EmailConfigurationForm 
+    
     list_display = ['__str__', 'smtp_server', 'from_address', 'is_active']
     
-    # Optional: Group the fields logically in the edit view
     fieldsets = (
         ('SMTP Server Settings', {
             'fields': ('smtp_server', 'smtp_port', 'smtp_username', 'smtp_password', 'use_tls')
@@ -60,19 +68,15 @@ class EmailConfigurationAdmin(admin.ModelAdmin):
         }),
     )
 
-    # SECURING THE SINGLETON:
     def has_add_permission(self, request):
-        # If a configuration already exists, remove the "Add" button
         if self.model.objects.exists():
             return False
         return True
 
     def has_delete_permission(self, request, obj=None):
-        # Remove the "Delete" button so the master config can't be destroyed
         return False
 
 
-# Register the models
 admin.site.register(DataSource, DataSourceAdmin)
 admin.site.register(TelemetryRecord, TelemetryRecordAdmin)
 admin.site.register(MetricDefinition)

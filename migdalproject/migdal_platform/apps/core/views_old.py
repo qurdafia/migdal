@@ -1,4 +1,3 @@
-# apps/core/views.py
 from rest_framework import generics, status
 from rest_framework.views import APIView
 from rest_framework.response import Response
@@ -9,8 +8,7 @@ from .models import DataSource, TelemetryRecord, MetricDefinition, EmailConfigur
 from .serializers import DataSourceSerializer, TelemetryRecordSerializer, MetricDefinitionSerializer, EmailConfigurationSerializer
 from .authentication import AnsibleApiKeyAuthentication
 
-# --- THE NEW CONSOLIDATED NOTIFICATION IMPORT ---
-from .notifications import send_consolidated_alerts
+from .notifications import send_infrastructure_alert
 
 
 # --- 1. INGEST VIEW ---
@@ -24,7 +22,6 @@ class UniversalIngestView(APIView):
         # --- BATCH INGEST ---
         if 'updates' in payload and isinstance(payload['updates'], list):
             success_count = 0
-            processed_device_ids = []  # <-- We collect the IDs here
             
             for item in payload['updates']:
                 uuid = item.get('uuid')
@@ -34,21 +31,18 @@ class UniversalIngestView(APIView):
                 try:
                     device = DataSource.objects.get(id=uuid)
                     
-                    # Pass the ENTIRE item to the normalizer
+                    # FIX: Pass the ENTIRE item to the normalizer, not just the metrics
                     standardized_payload = self._normalize_payload(item)
                     
                     TelemetryRecord.objects.create(source=device, payload=standardized_payload)
                     success_count += 1
+
+                    ip = standardized_payload.get('ip_address', 'Unknown IP')
                     
-                    # Add to our array instead of sending immediately
-                    processed_device_ids.append(device.id)
-                    
+                    send_infrastructure_alert(device_id=device.id, device_name=device.name, ip_address=ip)
+
                 except DataSource.DoesNotExist:
                     pass
-                    
-            # 📧 TRIGGER ONE EMAIL FOR THE ENTIRE BATCH
-            if processed_device_ids:
-                send_consolidated_alerts(processed_device_ids)
                     
             return Response({"status": "batch_processed", "saved": success_count}, status=201)
 
@@ -60,8 +54,9 @@ class UniversalIngestView(APIView):
                 
             record = TelemetryRecord.objects.create(source=source, payload=payload)
             
-            # 📧 TRIGGER ONE EMAIL (Wrapped in a list to match the batch format)
-            send_consolidated_alerts([source.id])
+            ip = payload.get('ip_address', 'Unknown IP')
+
+            send_infrastructure_alert(device_id=source.id, device_name=source.name, ip_address=ip)
 
             return Response({"status": "success", "id": record.id}, status=201)
 
@@ -70,11 +65,18 @@ class UniversalIngestView(APIView):
         """
         Translates raw Ansible data into the exact format the React Frontend expects.
         """
+        # 1. Grab the metrics dict
         metrics = item.get('metrics', {})
         device_type = item.get('device_type', '')
 
+        # -----------------------------------------------------
+        # FIX 1: INJECT IP ADDRESS INTO METRICS
+        # -----------------------------------------------------
         metrics['ip_address'] = item.get('ip_address', 'N/A')
 
+        # -----------------------------------------------------
+        # FIX 2: NORMALIZE HEALTH STATUS
+        # -----------------------------------------------------
         if 'health' in metrics:
             h = str(metrics['health']).upper()
             if h in ['OK', 'GREEN', 'HEALTHY', 'NORMAL']:
@@ -86,12 +88,16 @@ class UniversalIngestView(APIView):
             else:
                 metrics['health'] = 'UNKNOWN'
 
+        # -----------------------------------------------------
+        # FIX 3: CALCULATE VCENTER CPU & MEMORY %
+        # -----------------------------------------------------
         if device_type == 'hypervisor' and 'clusters' in metrics:
             total_cpu_used = 0
             total_cpu_cap = 0
             total_mem_used = 0
             total_mem_cap = 0
 
+            # Loop through all clusters (Our-LAB, Innovation-Team, etc.)
             for cluster_name, cluster_data in metrics.get('clusters', {}).items():
                 res = cluster_data.get('resource_summary', {})
                 total_cpu_used += res.get('cpuUsedMHz', 0)
@@ -99,12 +105,27 @@ class UniversalIngestView(APIView):
                 total_mem_used += res.get('memUsedMB', 0)
                 total_mem_cap += res.get('memCapacityMB', 0)
 
+            # Calculate the total percentage across the whole vCenter
             if total_cpu_cap > 0:
                 metrics['cpu_usage'] = round((total_cpu_used / total_cpu_cap) * 100, 1)
             if total_mem_cap > 0:
                 metrics['memory_usage'] = round((total_mem_used / total_mem_cap) * 100, 1)
 
+        # Storage (PowerStore) already has 'cpu_load' generated correctly in Ansible.
+
         return metrics
+
+# # --- 1. INGEST VIEW ---
+# class UniversalIngestView(APIView):
+#     authentication_classes = [AnsibleApiKeyAuthentication]
+#     permission_classes = [] 
+
+#     def post(self, request):
+#         source = request.user
+#         if not source:
+#             return Response({"error": "Unauthorized"}, status=401)
+#         record = TelemetryRecord.objects.create(source=source, payload=request.data)
+#         return Response({"status": "success", "id": record.id}, status=201)
 
 # --- 2. DEVICE LIST ---
 class DeviceListView(generics.ListAPIView):
@@ -118,6 +139,7 @@ class DeviceListView(generics.ListAPIView):
         else:
             qs = DataSource.objects.filter(organization=user.organization)
 
+        # Filters
         device_type = self.request.query_params.get('type')
         if device_type:
             qs = qs.filter(device_type__iexact=device_type)
@@ -137,11 +159,14 @@ class DeviceTelemetryView(generics.ListAPIView):
         device_id = self.kwargs['device_id']
         return TelemetryRecord.objects.filter(source_id=device_id).order_by('-timestamp')
 
-# --- 4. METRIC CONFIGURATION ---
+# --- 4. METRIC CONFIGURATION (THE FIX IS HERE) ---
 class MetricConfigurationView(generics.ListCreateAPIView, generics.DestroyAPIView):
     serializer_class = MetricDefinitionSerializer
     permission_classes = [IsAuthenticated]
     lookup_url_kwarg = 'metric_id'
+    
+    # !!! DISABLE PAGINATION FOR THIS VIEW !!!
+    # This ensures the API returns a simple Array [ ... ]
     pagination_class = None 
 
     def get_queryset(self):
@@ -152,6 +177,8 @@ class MetricConfigurationView(generics.ListCreateAPIView, generics.DestroyAPIVie
         serializer.save(source=source)
 
 # --- 5. MANAGEMENT VIEW ---
+
+# CHANGE: Inherit from RetrieveUpdateDestroyAPIView instead of DestroyAPIView
 class DeviceManagementView(generics.CreateAPIView, generics.RetrieveUpdateDestroyAPIView):
     serializer_class = DataSourceSerializer
     permission_classes = [IsAuthenticated]
@@ -166,17 +193,20 @@ class DeviceManagementView(generics.CreateAPIView, generics.RetrieveUpdateDestro
     def perform_create(self, serializer):
         serializer.save(organization=self.request.user.organization, active=True)
 
-# --- 6. EMAIL CONFIG VIEW ---
+
 class EmailConfigView(APIView):
+    # Lock this down so only logged-in users can see/change SMTP passwords
     permission_classes = [IsAuthenticated]
 
     def get(self, request):
+        # Force it to always use row ID 1
         config, created = EmailConfiguration.objects.get_or_create(id=1)
         serializer = EmailConfigurationSerializer(config)
         return Response(serializer.data)
 
     def put(self, request):
         config, created = EmailConfiguration.objects.get_or_create(id=1)
+        # partial=True means React can update just one field at a time if it wants to
         serializer = EmailConfigurationSerializer(config, data=request.data, partial=True)
         if serializer.is_valid():
             serializer.save()

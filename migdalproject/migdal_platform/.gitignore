@@ -91,3 +91,6 @@ test_vcenter.py
 
 documentation/
 lic_test.py
+payload_test.py
+payload_all_test.py
+payload_all_test2.py

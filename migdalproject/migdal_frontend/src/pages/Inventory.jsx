@@ -118,7 +118,9 @@ const Inventory = () => {
             await api.post(`/core/devices/${selectedDevice.id}/metrics/`, payload);
             
             // Reset form
-            setMetricForm({ label: '', json_path: '', unit: '', warning_threshold: '', critical_threshold: '' }); 
+            setMetricForm({ label: '', json_path: '', unit: '', threshold_warning: '', threshold_critical: '' });       
+            // setMetricForm({ label: '', json_path: '', unit: '', warning_threshold: '', critical_threshold: '' }); 
+            
             loadMetrics(selectedDevice.id); // Refresh list
         } catch (e) { alert("Failed to add metric"); }
     };
@@ -217,7 +219,7 @@ const Inventory = () => {
                             <div style={styles.inputGroup}>
                                 <label>Name</label>
                                 <input 
-                                    value={deviceForm.name} 
+                                    value={deviceForm.name || ''} 
                                     onChange={e => setDeviceForm({...deviceForm, name: e.target.value})}
                                     required style={styles.input}
                                 />
@@ -225,7 +227,7 @@ const Inventory = () => {
                             <div style={styles.inputGroup}>
                                 <label>Type</label>
                                 <select 
-                                    value={deviceForm.type} 
+                                    value={deviceForm.type || ''} 
                                     onChange={e => setDeviceForm({...deviceForm, type: e.target.value})}
                                     style={styles.select}
                                 >

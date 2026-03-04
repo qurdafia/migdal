@@ -5,12 +5,13 @@ import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ReferenceLine, R
 import {
     Server, Activity, FileText, Download, Play, LogOut, Table, X,
     ShieldCheck, Bot, Network, Database, HardDrive, ArrowLeft, Calendar,
-    AlertTriangle, CheckCircle, XCircle
+    AlertTriangle, CheckCircle, XCircle, Mail
 } from 'lucide-react';
 
-// --- IMPORT YOUR EXISTING PAGES ---
+import EmailConfig from './EmailConfig';
 import Inventory from './Inventory';
 import AISettings from './AISettings';
+import ReportingConsole from './ReportingConsole';
 
 const COLORS = ['#2563eb', '#16a34a', '#dc2626', '#9333ea', '#ea580c', '#0891b2'];
 
@@ -25,8 +26,8 @@ const Dashboard = () => {
     const [devices, setDevices] = useState([]);
     const [listPage, setListPage] = useState(1);
     const [listTotalPages, setListTotalPages] = useState(1);
-    const [startDate, setStartDate] = useState(new Date().toISOString().split('T')[0]);
-    const [endDate, setEndDate] = useState(new Date().toISOString().split('T')[0]);
+    // const [startDate, setStartDate] = useState(new Date().toISOString().split('T')[0]);
+    // const [endDate, setEndDate] = useState(new Date().toISOString().split('T')[0]);
 
     // Detail View State
     const [selectedDevice, setSelectedDevice] = useState(null);
@@ -40,8 +41,15 @@ const Dashboard = () => {
     const [showLicenseModal, setShowLicenseModal] = useState(false);
     const [licenseInfo, setLicenseInfo] = useState(null);
 
+    // useEffect(() => {
+    //     if (category && category !== 'inventory' && category !== 'ai-settings') {
+    //         loadInfrastructureList();
+    //     }
+    // }, [category, deviceId, listPage]);
+
     useEffect(() => {
-        if (category && category !== 'inventory' && category !== 'ai-settings') {
+        const nonDeviceCategories = ['inventory', 'ai-settings', 'email-settings', 'reporting'];
+        if (category && !nonDeviceCategories.includes(category)) {
             loadInfrastructureList();
         }
     }, [category, deviceId, listPage]);
@@ -86,7 +94,7 @@ const Dashboard = () => {
         } catch (e) { setMetrics([]); }
     };
 
-    const fetchTelemetry = async (id, page, currentMetrics = metrics) => {
+    const fetchTelemetry = async (id, page) => {
         try {
             const res = await api.get(`/core/devices/${id}/telemetry/?page=${page}`);
             const rawRecords = res.data.results || [];
@@ -115,21 +123,59 @@ const Dashboard = () => {
                 };
             });
 
-            if (flatData.length > 0 && (!currentMetrics || currentMetrics.length === 0)) {
-                // Find all keys that are numbers
-                const auto = Object.keys(flatData[0])
-                    .filter(k => !['id','timestamp','source'].includes(k) && typeof flatData[0][k] === 'number')
-                    .map((k, i) => ({
-                        id: i, json_path: k, label: k.toUpperCase(), color: COLORS[i % COLORS.length]
-                    }));
-                setMetrics(auto);
-            }
+            // ⚠️ REMOVED THE AUTO-GENERATION BLOCK HERE ⚠️
+            // The frontend will now STRICTLY wait for fetchMetrics to populate the dropdown and graph.
 
             // Important: reverse the data so it reads left-to-right (oldest to newest) on the graph
             setTelemetry(flatData.reverse());
             setGraphTotalPages(Math.ceil((res.data.count || 0) / 10) || 1);
         } catch (e) { console.error("Telemetry error", e); }
     };
+
+    // const fetchTelemetry = async (id, page, currentMetrics = metrics) => {
+    //     try {
+    //         const res = await api.get(`/core/devices/${id}/telemetry/?page=${page}`);
+    //         const rawRecords = res.data.results || [];
+
+    //         const flatData = rawRecords.map(r => {
+    //             const parsedPayload = {};
+    //             for (let key in r.payload) {
+    //                 let val = r.payload[key];
+
+    //                 // Backwards compatibility to clean up old string metrics
+    //                 if (typeof val === 'string') {
+    //                     // Strip out any letters, %, spaces, or slashes (e.g. "0.17 ms" -> "0.17")
+    //                     const stripped = val.replace(/[a-zA-Z%\s/]/g, '').trim();
+    //                     // If it's a valid number (and not an IP address with multiple dots), convert it
+    //                     if (stripped !== '' && !isNaN(Number(stripped))) {
+    //                         val = Number(stripped);
+    //                     }
+    //                 }
+    //                 parsedPayload[key] = val;
+    //             }
+
+    //             return {
+    //                 id: r.id,
+    //                 timestamp: new Date(r.timestamp).toLocaleTimeString(),
+    //                 ...parsedPayload
+    //             };
+    //         });
+
+    //         if (flatData.length > 0 && (!currentMetrics || currentMetrics.length === 0)) {
+    //             // Find all keys that are numbers
+    //             const auto = Object.keys(flatData[0])
+    //                 .filter(k => !['id','timestamp','source'].includes(k) && typeof flatData[0][k] === 'number')
+    //                 .map((k, i) => ({
+    //                     id: i, json_path: k, label: k.toUpperCase(), color: COLORS[i % COLORS.length]
+    //                 }));
+    //             setMetrics(auto);
+    //         }
+
+    //         // Important: reverse the data so it reads left-to-right (oldest to newest) on the graph
+    //         setTelemetry(flatData.reverse());
+    //         setGraphTotalPages(Math.ceil((res.data.count || 0) / 10) || 1);
+    //     } catch (e) { console.error("Telemetry error", e); }
+    // };
 
     // ==========================================
     // HEALTH LOGIC ENGINE
@@ -238,6 +284,14 @@ const Dashboard = () => {
                      onClick={() => navigate('/infrastructure/ai-settings')}>
                     <Bot size={18}/> AI Config
                 </div>
+                <div style={{...styles.menuItem, backgroundColor: category === 'email-settings' ? '#374151' : 'transparent', color: category === 'email-settings' ? 'white' : '#d1d5db'}}
+                     onClick={() => navigate('/infrastructure/email-settings')}>
+                    <Mail size={18}/> Email Config
+                </div>
+                <div style={{...styles.menuItem, backgroundColor: category === 'reporting' ? '#374151' : 'transparent', color: category === 'reporting' ? 'white' : '#d1d5db'}}
+                    onClick={() => navigate('/infrastructure/reporting')}>
+                    <Calendar size={18}/> Reporting
+                </div>
                 <div style={{...styles.menuItem}}>
                     <div onClick={handleLicenseClick} style={{...styles.licenseBadge, cursor:'pointer'}}><ShieldCheck size={14}/> Licensed</div>
                 </div>
@@ -252,12 +306,9 @@ const Dashboard = () => {
         <>
             <div style={styles.topBar}>
                 <h1 style={{textTransform:'capitalize'}}>{category} Fleet</h1>
-                <div style={styles.dateControl}>
-                    <Calendar size={16} color="#6b7280"/>
-                    <input type="date" value={startDate} onChange={e=>setStartDate(e.target.value)} style={styles.dateInput}/>
-                    <input type="date" value={endDate} onChange={e=>setEndDate(e.target.value)} style={styles.dateInput}/>
-                    <button onClick={() => handleReportDownload('pdf')} style={styles.btnPrimary}><FileText size={14}/> PDF</button>
-                    <button onClick={() => handleReportDownload('csv')} style={styles.btnGreen}><Table size={14}/> CSV</button>
+                <div style={{display: 'flex', gap: '10px'}}>
+                    <button onClick={() => handleReportDownload('pdf')} style={styles.btnPrimary}><FileText size={14}/> Live PDF</button>
+                    <button onClick={() => handleReportDownload('csv')} style={styles.btnGreen}><Table size={14}/> Live CSV</button>
                 </div>
             </div>
             {loading ? <p>Loading...</p> : (
@@ -411,6 +462,8 @@ const Dashboard = () => {
     const renderMainContent = () => {
         if (category === 'inventory') return <Inventory />;
         if (category === 'ai-settings') return <AISettings />;
+        if (category === 'email-settings') return <EmailConfig />;
+        if (category === 'reporting') return <ReportingConsole />;
         if (deviceId && selectedDevice) return renderInfraDetail();
         return renderInfraList();
     };

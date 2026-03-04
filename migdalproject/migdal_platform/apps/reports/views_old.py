@@ -1,14 +1,8 @@
-import openpyxl
-from io import BytesIO
-from django.utils import timezone
-
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated
 from django.http import HttpResponse
-
-# --- ADDED TelemetryRecord HERE ---
-from apps.core.models import DataSource, TelemetryRecord
+from apps.core.models import DataSource
 
 # --- CSV & DATE IMPORTS ---
 import csv
@@ -211,6 +205,7 @@ class CategoryHealthReportView(APIView):
         return Response({"error": "Invalid report type"}, status=400)
 
 
+
 class DownloadReportView(APIView):
     """
     Generates a PDF using an HTML Template for AI Analysis.
@@ -257,105 +252,4 @@ class DownloadReportView(APIView):
         if pisa_status.err:
             return Response({"error": "PDF generation failed"}, status=500)
             
-        return response
-
-
-# =====================================================================
-# NEW: HISTORICAL REPORTING VIEW
-# =====================================================================
-
-class HistoricalReportView(APIView):
-    """
-    Generates a historical Excel (.xlsx) report separated into actual TABS by device type.
-    """
-    permission_classes = [IsAuthenticated]
-
-    def get(self, request):
-        start_str = request.query_params.get('start_date')
-        end_str = request.query_params.get('end_date')
-
-        try:
-            s_date = parse_date(start_str)
-            e_date = parse_date(end_str)
-            start_dt = timezone.make_aware(datetime.combine(s_date, datetime.min.time()))
-            end_dt = timezone.make_aware(datetime.combine(e_date, datetime.min.time())) + timedelta(days=1)
-        except Exception:
-            return HttpResponse("Invalid date format", status=400)
-
-        # Query ALL records in the time range
-        records = TelemetryRecord.objects.filter(
-            source__organization=request.user.organization,
-            timestamp__gte=start_dt,
-            timestamp__lt=end_dt
-        ).select_related('source').order_by('source__device_type', 'source__name', '-timestamp')
-
-        # --- 1. INITIALIZE EXCEL WORKBOOK ---
-        wb = openpyxl.Workbook()
-        wb.remove(wb.active)  # Remove the default empty sheet
-        
-        # Group the records into a dictionary by device_type
-        grouped_data = {}
-        for rec in records:
-            dtype = str(rec.source.device_type).capitalize()
-            if dtype not in grouped_data:
-                grouped_data[dtype] = []
-            grouped_data[dtype].append(rec)
-
-        # Handle empty case
-        if not grouped_data:
-            ws = wb.create_sheet(title="No Data")
-            ws.append(["No records found for this date range."])
-        else:
-            # --- 2. CREATE A TAB FOR EACH DEVICE TYPE ---
-            for dtype, recs in grouped_data.items():
-                ws = wb.create_sheet(title=dtype)
-                
-                # Create the Header Row
-                ws.append(['Device Name', 'IP Address', 'Timestamp (Local)', 'CPU', 'Memory', 'Health Status'])
-                
-                # Format Header Row (Optional: Make it bold)
-                for cell in ws["1:1"]:
-                    cell.font = openpyxl.styles.Font(bold=True)
-
-                for rec in recs:
-                    payload_data = rec.payload or {}
-                    ip = payload_data.get('ip_address') or payload_data.get('host_ip') or "N/A"
-                    
-                    c_val = payload_data.get('cpu_1min') or payload_data.get('cpu_usage') or payload_data.get('cluster_cpu_usage_pct') or 0
-                    m_val = payload_data.get('memory_usage') or payload_data.get('ram_usage') or 0
-                    
-                    try: float_c = float(c_val)
-                    except: float_c = 0
-                    try: float_m = float(m_val)
-                    except: float_m = 0
-
-                    if float_c > 90 or float_m > 90: health = "CRITICAL"
-                    elif float_c > 75 or float_m > 75: health = "WARNING"
-                    else: health = "HEALTHY"
-
-                    # --- 3. FIX THE TIMEZONE ---
-                    # Converts the strict UTC database time to the user's local timezone
-                    local_time = timezone.localtime(rec.timestamp)
-                    formatted_time = local_time.strftime("%Y-%m-%d %H:%M:%S")
-
-                    ws.append([
-                        rec.source.name,
-                        ip,
-                        formatted_time,
-                        f"{float_c}%" if float_c else "N/A",
-                        f"{float_m}%" if float_m else "N/A",
-                        health
-                    ])
-
-        # --- 4. SAVE AND RETURN EXCEL FILE ---
-        buffer = BytesIO()
-        wb.save(buffer)
-        buffer.seek(0)
-
-        response = HttpResponse(
-            buffer.getvalue(),
-            content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
-        )
-        response['Content-Disposition'] = f'attachment; filename="Migdal_Historical_{start_str}_to_{end_str}.xlsx"'
-        
         return response
