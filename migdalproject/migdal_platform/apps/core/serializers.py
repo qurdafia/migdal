@@ -1,5 +1,5 @@
 from rest_framework import serializers
-from .models import DataSource, TelemetryRecord, MetricDefinition
+from .models import DataSource, TelemetryRecord, MetricDefinition, EmailConfiguration
 
 class MetricDefinitionSerializer(serializers.ModelSerializer):
     class Meta:
@@ -76,7 +76,13 @@ class DataSourceSerializer(serializers.ModelSerializer):
     def get_status(self, obj):
         return "active" if obj.active else "inactive"
 
-        
+
+class EmailConfigurationSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = EmailConfiguration
+        fields = '__all__'
+
+
 # class DataSourceSerializer(serializers.ModelSerializer):
 #     # Calculated Fields
 #     type = serializers.CharField(source='device_type')

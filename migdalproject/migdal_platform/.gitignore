@@ -90,3 +90,4 @@ test_storage.py
 test_vcenter.py
 
 documentation/
+lic_test.py

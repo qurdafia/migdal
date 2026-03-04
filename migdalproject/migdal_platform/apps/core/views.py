@@ -4,8 +4,8 @@ from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.authentication import TokenAuthentication 
 
-from .models import DataSource, TelemetryRecord, MetricDefinition
-from .serializers import DataSourceSerializer, TelemetryRecordSerializer, MetricDefinitionSerializer
+from .models import DataSource, TelemetryRecord, MetricDefinition, EmailConfiguration
+from .serializers import DataSourceSerializer, TelemetryRecordSerializer, MetricDefinitionSerializer, EmailConfigurationSerializer
 from .authentication import AnsibleApiKeyAuthentication
 
 
@@ -183,3 +183,21 @@ class DeviceManagementView(generics.CreateAPIView, generics.RetrieveUpdateDestro
         serializer.save(organization=self.request.user.organization, active=True)
 
 
+class EmailConfigView(APIView):
+    # Lock this down so only logged-in users can see/change SMTP passwords
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        # Force it to always use row ID 1
+        config, created = EmailConfiguration.objects.get_or_create(id=1)
+        serializer = EmailConfigurationSerializer(config)
+        return Response(serializer.data)
+
+    def put(self, request):
+        config, created = EmailConfiguration.objects.get_or_create(id=1)
+        # partial=True means React can update just one field at a time if it wants to
+        serializer = EmailConfigurationSerializer(config, data=request.data, partial=True)
+        if serializer.is_valid():
+            serializer.save()
+            return Response(serializer.data)
+        return Response(serializer.errors, status=400)

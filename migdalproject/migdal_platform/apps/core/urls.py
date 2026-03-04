@@ -4,7 +4,8 @@ from .views import (
     DeviceListView, 
     DeviceTelemetryView, 
     DeviceManagementView, 
-    MetricConfigurationView
+    MetricConfigurationView,
+    EmailConfigView
 )
 
 urlpatterns = [
@@ -28,6 +29,7 @@ urlpatterns = [
     path('devices/<uuid:device_id>/metrics/', MetricConfigurationView.as_view(), name='metric-list'),
     # DELETE to remove a specific metric config
     path('devices/<uuid:device_id>/metrics/<int:metric_id>/', MetricConfigurationView.as_view(), name='metric-delete'),
+    path('email-config/', EmailConfigView.as_view(), name='email-config'),
 ]
 
 

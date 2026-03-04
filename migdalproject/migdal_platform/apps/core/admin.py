@@ -1,5 +1,6 @@
 from django.contrib import admin
-from .models import DataSource, MetricDefinition, TelemetryRecord
+from .models import DataSource, MetricDefinition, TelemetryRecord, EmailConfiguration
+
 
 class MetricDefinitionInline(admin.TabularInline):
     """
@@ -39,6 +40,37 @@ class TelemetryRecordAdmin(admin.ModelAdmin):
 
     def has_add_permission(self, request):
         return False  # Disable the "Add" button (Data only comes from API)
+
+
+@admin.register(EmailConfiguration)
+class EmailConfigurationAdmin(admin.ModelAdmin):
+    # What columns show up in the list view
+    list_display = ['__str__', 'smtp_server', 'from_address', 'is_active']
+    
+    # Optional: Group the fields logically in the edit view
+    fieldsets = (
+        ('SMTP Server Settings', {
+            'fields': ('smtp_server', 'smtp_port', 'smtp_username', 'smtp_password', 'use_tls')
+        }),
+        ('Routing', {
+            'fields': ('from_address', 'recipient_list', 'is_active')
+        }),
+        ('Email Template', {
+            'fields': ('subject', 'message_body')
+        }),
+    )
+
+    # SECURING THE SINGLETON:
+    def has_add_permission(self, request):
+        # If a configuration already exists, remove the "Add" button
+        if self.model.objects.exists():
+            return False
+        return True
+
+    def has_delete_permission(self, request, obj=None):
+        # Remove the "Delete" button so the master config can't be destroyed
+        return False
+
 
 # Register the models
 admin.site.register(DataSource, DataSourceAdmin)
