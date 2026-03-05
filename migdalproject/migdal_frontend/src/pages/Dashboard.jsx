@@ -4,8 +4,8 @@ import { useNavigate, useParams } from 'react-router-dom';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ReferenceLine, ResponsiveContainer, Legend } from 'recharts';
 import {
     Server, Activity, FileText, Download, Play, LogOut, Table, X,
-    ShieldCheck, Bot, Network, Database, HardDrive, ArrowLeft, Calendar,
-    AlertTriangle, CheckCircle, XCircle, Mail
+    ShieldCheck, Bot, Network, Database, Box, ArrowLeft, Calendar,
+    AlertTriangle, CheckCircle, XCircle, Mail, Search, TowerControl
 } from 'lucide-react';
 
 import EmailConfig from './EmailConfig';
@@ -22,12 +22,14 @@ const Dashboard = () => {
     // ==========================================
     // SHARED STATE
     // ==========================================
+
     const [loading, setLoading] = useState(false);
     const [devices, setDevices] = useState([]);
     const [listPage, setListPage] = useState(1);
     const [listTotalPages, setListTotalPages] = useState(1);
-    // const [startDate, setStartDate] = useState(new Date().toISOString().split('T')[0]);
-    // const [endDate, setEndDate] = useState(new Date().toISOString().split('T')[0]);
+
+    const [searchQuery, setSearchQuery] = useState('');
+   
 
     // Detail View State
     const [selectedDevice, setSelectedDevice] = useState(null);
@@ -42,25 +44,37 @@ const Dashboard = () => {
     const [licenseInfo, setLicenseInfo] = useState(null);
 
     // useEffect(() => {
-    //     if (category && category !== 'inventory' && category !== 'ai-settings') {
+    //     const nonDeviceCategories = ['inventory', 'ai-settings', 'email-settings', 'reporting'];
+    //     if (category && !nonDeviceCategories.includes(category)) {
     //         loadInfrastructureList();
     //     }
     // }, [category, deviceId, listPage]);
 
     useEffect(() => {
         const nonDeviceCategories = ['inventory', 'ai-settings', 'email-settings', 'reporting'];
-        if (category && !nonDeviceCategories.includes(category)) {
-            loadInfrastructureList();
-        }
-    }, [category, deviceId, listPage]);
+        
+        const delayDebounceFn = setTimeout(() => {
+            if (category && !nonDeviceCategories.includes(category)) {
+                loadInfrastructureList();
+            }
+        }, 500);
+
+        return () => clearTimeout(delayDebounceFn);
+
+    }, [category, deviceId, listPage, searchQuery]);
+
 
     // ==========================================
     // DATA FETCHERS
     // ==========================================
+
     const loadInfrastructureList = async () => {
         setLoading(true);
         try {
-            const res = await api.get('/core/devices/', { params: { page: listPage, type: category } });
+
+            const res = await api.get('/core/devices/', { 
+                params: { page: listPage, type: category, search: searchQuery } 
+            });
 
             const allResults = res.data.results || res.data;
             const filtered = Array.isArray(allResults)
@@ -68,7 +82,17 @@ const Dashboard = () => {
                 : [];
 
             setDevices(filtered);
-            setListTotalPages(Math.ceil((res.data.count || filtered.length) / 10) || 1);
+            setListTotalPages(Math.ceil((res.data.count || filtered.length) / 10) || 1);     
+
+            // const res = await api.get('/core/devices/', { params: { page: listPage, type: category } });
+
+            // const allResults = res.data.results || res.data;
+            // const filtered = Array.isArray(allResults)
+            //     ? allResults.filter(d => d.type.toLowerCase() === category.toLowerCase())
+            //     : [];
+
+            // setDevices(filtered);
+            // setListTotalPages(Math.ceil((res.data.count || filtered.length) / 10) || 1);
 
             if (deviceId) {
                 let found = filtered.find(d => d.id === parseInt(deviceId) || d.id === deviceId);
@@ -132,54 +156,10 @@ const Dashboard = () => {
         } catch (e) { console.error("Telemetry error", e); }
     };
 
-    // const fetchTelemetry = async (id, page, currentMetrics = metrics) => {
-    //     try {
-    //         const res = await api.get(`/core/devices/${id}/telemetry/?page=${page}`);
-    //         const rawRecords = res.data.results || [];
-
-    //         const flatData = rawRecords.map(r => {
-    //             const parsedPayload = {};
-    //             for (let key in r.payload) {
-    //                 let val = r.payload[key];
-
-    //                 // Backwards compatibility to clean up old string metrics
-    //                 if (typeof val === 'string') {
-    //                     // Strip out any letters, %, spaces, or slashes (e.g. "0.17 ms" -> "0.17")
-    //                     const stripped = val.replace(/[a-zA-Z%\s/]/g, '').trim();
-    //                     // If it's a valid number (and not an IP address with multiple dots), convert it
-    //                     if (stripped !== '' && !isNaN(Number(stripped))) {
-    //                         val = Number(stripped);
-    //                     }
-    //                 }
-    //                 parsedPayload[key] = val;
-    //             }
-
-    //             return {
-    //                 id: r.id,
-    //                 timestamp: new Date(r.timestamp).toLocaleTimeString(),
-    //                 ...parsedPayload
-    //             };
-    //         });
-
-    //         if (flatData.length > 0 && (!currentMetrics || currentMetrics.length === 0)) {
-    //             // Find all keys that are numbers
-    //             const auto = Object.keys(flatData[0])
-    //                 .filter(k => !['id','timestamp','source'].includes(k) && typeof flatData[0][k] === 'number')
-    //                 .map((k, i) => ({
-    //                     id: i, json_path: k, label: k.toUpperCase(), color: COLORS[i % COLORS.length]
-    //                 }));
-    //             setMetrics(auto);
-    //         }
-
-    //         // Important: reverse the data so it reads left-to-right (oldest to newest) on the graph
-    //         setTelemetry(flatData.reverse());
-    //         setGraphTotalPages(Math.ceil((res.data.count || 0) / 10) || 1);
-    //     } catch (e) { console.error("Telemetry error", e); }
-    // };
-
     // ==========================================
     // HEALTH LOGIC ENGINE
     // ==========================================
+
     const calculateHealth = (device) => {
         // 1. Check Offline
         if (device.status !== 'active') {
@@ -209,6 +189,7 @@ const Dashboard = () => {
     // ==========================================
     // ACTION HANDLERS
     // ==========================================
+
     const handleLicenseClick = async () => {
         try { const res = await api.get('/accounts/status/'); setLicenseInfo(res.data); setShowLicenseModal(true); } catch(e) {}
     };
@@ -233,23 +214,6 @@ const Dashboard = () => {
             alert("Report failed. Check console for details."); 
         }
     };
-
-    // const handleReportDownload = async (type) => {
-    //     const ext = type === 'pdf' ? 'pdf' : 'csv';
-    //     const endpoint = type === 'pdf' ? 'download' : 'csv';
-    //     try {
-    //         const res = await api.get(`/reports/category/${category}/${endpoint}/`, {
-    //             params: { start_date: startDate, end_date: endDate },
-    //             responseType: 'blob'
-    //         });
-    //         const url = window.URL.createObjectURL(new Blob([res.data]));
-    //         const link = document.createElement('a');
-    //         link.href = url;
-    //         link.setAttribute('download', `${category}_Report.${ext}`);
-    //         document.body.appendChild(link);
-    //         link.click();
-    //     } catch (e) { alert("Report failed"); }
-    // };
 
     const handleLogout = () => {
         localStorage.clear();
@@ -281,18 +245,20 @@ const Dashboard = () => {
     // ==========================================
     // RENDERERS
     // ==========================================
+
     const renderSidebar = () => (
         <div style={styles.sidebar}>
-            <div style={styles.brand}><Server size={24} /> Migdal</div>
+            <div style={styles.brand}><TowerControl size={24} /> Migdal Platform</div>
+            {/* <div style={styles.brand}>Migdal Platform</div> */}
             <div style={styles.menu}>
                 <div style={styles.menuLabel}>INFRASTRUCTURE</div>
                 {['hypervisor', 'network', 'storage', 'server'].map(cat => (
                     <div key={cat} onClick={() => navigate(`/infrastructure/${cat}`)}
                         style={{...styles.menuItem, backgroundColor: category === cat ? '#374151' : 'transparent', color: category === cat ? 'white' : '#d1d5db'}}>
-                        {cat === 'hypervisor' && <Server size={18}/>}
+                        {cat === 'hypervisor' && <Box size={18}/>}
                         {cat === 'network' && <Network size={18}/>}
-                        {cat === 'storage' && <HardDrive size={18}/>}
-                        {cat === 'server' && <Database size={18}/>}
+                        {cat === 'storage' && <Database size={18}/>}
+                        {cat === 'server' && <Server size={18}/>}
                         <span style={{textTransform:'capitalize'}}>{cat}s</span>
                     </div>
                 ))}
@@ -325,8 +291,26 @@ const Dashboard = () => {
 
     const renderInfraList = () => (
         <>
+            <div style={styles.header}>
+                <div>
+                    <h1 style={styles.title}>{category} Fleet</h1>
+                </div>
+            </div>
             <div style={styles.topBar}>
-                <h1 style={{textTransform:'capitalize'}}>{category} Fleet</h1>
+                <div style={styles.searchBox}>
+                    <Search size={18} color="#6b7280" />
+                    <input 
+                        type="text" 
+                        placeholder={`Search ${category}s...`}
+                        value={searchQuery}
+                        onChange={(e) => {
+                            setSearchQuery(e.target.value);
+                            setListPage(1);
+                        }}
+                        style={styles.searchInput}
+                    />
+                </div>
+
                 <div style={{display: 'flex', gap: '10px'}}>
                     <button onClick={() => handleReportDownload('pdf')} style={styles.btnPrimary}><FileText size={14}/> Live PDF</button>
                     <button onClick={() => handleReportDownload('csv')} style={styles.btnGreen}><Table size={14}/> Live CSV</button>
@@ -526,14 +510,16 @@ const Dashboard = () => {
 
 const styles = {
     container: { display: 'flex', height: '100vh', backgroundColor: '#f3f4f6', fontFamily: 'Inter, sans-serif' },
+    header: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' },
+    title: { display: 'flex', alignItems: 'center', gap: '10px', fontSize: '1.5rem', margin: '0 0 5px 0', textTransform:'capitalize' },
     sidebar: { width: '250px', backgroundColor: '#111827', color: 'white', padding: '20px', display: 'flex', flexDirection: 'column' },
-    brand: { fontSize: '1.2rem', fontWeight: 'bold', display: 'flex', gap: '10px', alignItems: 'center', marginBottom: '40px' },
+    brand: { fontSize: '1.2rem', fontWeight: 'bold', display: 'flex', gap: '10px', alignItems: 'center', marginTop: '20px', marginBottom: '20px' },
     menu: { flex: 1 },
     menuLabel: { fontSize: '0.75rem', color: '#6b7280', marginBottom: '10px', fontWeight: 'bold', marginTop: '20px', letterSpacing:'0.05em' },
     menuItem: { padding: '10px', borderRadius: '6px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '5px', transition:'0.2s', color:'#d1d5db' },
     logout: { cursor:'pointer', display:'flex', gap:'10px', color:'#9ca3af', padding:'10px' },
     main: { flex: 1, padding: '30px', overflowY: 'auto' },
-    topBar: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '25px' },
+    topBar: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' },
     dateControl: { display: 'flex', gap: '10px', alignItems: 'center', backgroundColor:'white', padding:'8px', borderRadius:'8px', boxShadow:'0 1px 2px rgba(0,0,0,0.05)' },
     dateInput: { border:'1px solid #d1d5db', borderRadius:'4px', padding:'4px' },
     grid: { display:'grid', gridTemplateColumns:'repeat(auto-fill, minmax(280px, 1fr))', gap:'20px' },
@@ -555,7 +541,9 @@ const styles = {
     closeBtn: { background: 'none', border: 'none', cursor: 'pointer', color: '#6b7280' },
     infoRow: { display: 'flex', justifyContent: 'space-between', marginBottom: '15px', fontSize: '0.95rem' },
     divider: { border: 'none', borderTop: '1px solid #e5e7eb', margin: '20px 0' },
-    metricSelect: { padding: '4px 8px', borderRadius: '6px', border: '1px solid #d1d5db', fontSize: '0.85rem', outline: 'none', cursor: 'pointer', backgroundColor: '#f9fafb' } // NEW: Dropdown style
+    metricSelect: { padding: '4px 8px', borderRadius: '6px', border: '1px solid #d1d5db', fontSize: '0.85rem', outline: 'none', cursor: 'pointer', backgroundColor: '#f9fafb' },
+    searchBox: { display: 'flex', alignItems: 'center', backgroundColor: 'white', padding: '8px 15px', borderRadius: '8px', border: '1px solid #d1d5db', width: '280px', gap: '10px', boxShadow: '0 1px 2px rgba(0,0,0,0.05)' },
+    searchInput: { border: 'none', outline: 'none', width: '100%', fontSize: '0.9rem' },
 };
 
 export default Dashboard;

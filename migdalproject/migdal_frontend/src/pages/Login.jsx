@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import api from '../api';
 import { useNavigate } from 'react-router-dom';
-import { Lock, User, Server } from 'lucide-react'; // Icons
+import { Lock, User, Server, TowerControl } from 'lucide-react'; // Icons
 
 const Login = () => {
     const [username, setUsername] = useState('');
@@ -37,7 +37,7 @@ const Login = () => {
         <div style={styles.container}>
             <div style={styles.card}>
                 <div style={styles.header}>
-                    <Server size={48} color="#2563eb" />
+                    <TowerControl size={48} color="#2563eb" />
                     <h1 style={styles.title}>Migdal Platform</h1>
                     <p style={styles.subtitle}>Enterprise Infrastructure Intelligence</p>
                 </div>

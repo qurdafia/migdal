@@ -57,10 +57,14 @@ const AISettings = () => {
     return (
         <div style={styles.container}>
             <div style={styles.header}>
-                <button onClick={() => navigate('/dashboard')} style={styles.backBtn}>
+                {/* <button onClick={() => navigate('/dashboard')} style={styles.backBtn}>
                     <ArrowLeft size={16} /> Back
-                </button>
-                <h1><Bot size={24} /> AI Model Configuration</h1>
+                </button> */}
+                <div>
+                    {/* <h1 style={styles.title}><Bot size={24} /> AI Model Configuration</h1> */}
+                    <h1 style={styles.title}>AI Model Configuration</h1>
+                    <p style={styles.subtitle}>Configure LLM model and prompt.</p>
+                </div>
             </div>
 
             <div style={styles.card}>
@@ -83,7 +87,7 @@ const AISettings = () => {
 
                         {/* MODEL NAME (Editable with Suggestions) */}
                         <div style={styles.section}>
-                            <label style={styles.label}><Server size={14}/> Model Name</label>
+                            <label style={styles.label}>Model Name</label>
                             <input 
                                 list="model-suggestions"
                                 value={formData.model_name}
@@ -151,8 +155,12 @@ const AISettings = () => {
 };
 
 const styles = {
-    container: { padding: '40px', maxWidth: '800px', margin: '0 auto', fontFamily: 'Inter, sans-serif' },
-    header: { display: 'flex', alignItems: 'center', gap: '20px', marginBottom: '30px' },
+    //container: { padding: '0px', maxWidth: '800px', margin: '0 auto', fontFamily: 'Inter, sans-serif' },
+    container: { maxWidth: '1000px', margin: '0 auto', paddingBottom: '40px' },
+    header: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' },
+    title: { display: 'flex', alignItems: 'center', gap: '10px', fontSize: '1.5rem', margin: '0 0 5px 0' },
+    subtitle: { color: '#6b7280', margin: 0, fontSize: '0.95rem' },
+    // header: { display: 'flex', alignItems: 'center', gap: '20px', marginBottom: '30px' },
     backBtn: { background: 'none', border: 'none', cursor: 'pointer', display: 'flex', gap: '5px' },
     card: { backgroundColor: 'white', padding: '30px', borderRadius: '12px', boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)' },
     form: { display: 'flex', flexDirection: 'column', gap: '20px' },

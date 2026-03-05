@@ -74,7 +74,8 @@ const EmailConfig = () => {
         <div style={styles.container}>
             <div style={styles.header}>
                 <div>
-                    <h1 style={styles.title}><Mail size={24} color="#4f46e5" /> Automated Email Configuration</h1>
+                    {/* <h1 style={styles.title}><Mail size={24} color="#4f46e5" /> Automated Email Configuration</h1> */}
+                    <h1 style={styles.title}>Automated Email Configuration</h1>
                     <p style={styles.subtitle}>Configure the SMTP settings used to send Ansible post-run reports.</p>
                 </div>
                 
@@ -175,7 +176,8 @@ const EmailConfig = () => {
 
 const styles = {
     container: { maxWidth: '1000px', margin: '0 auto', paddingBottom: '40px' },
-    header: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '25px', backgroundColor: 'white', padding: '20px', borderRadius: '12px', border: '1px solid #e5e7eb', boxShadow: '0 1px 3px rgba(0,0,0,0.05)' },
+    header: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' },
+    // header: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '25px', backgroundColor: 'white', padding: '20px', borderRadius: '12px', border: '1px solid #e5e7eb', boxShadow: '0 1px 3px rgba(0,0,0,0.05)' },
     title: { display: 'flex', alignItems: 'center', gap: '10px', fontSize: '1.5rem', margin: '0 0 5px 0' },
     subtitle: { color: '#6b7280', margin: 0, fontSize: '0.95rem' },
     activeToggle: { display: 'flex', alignItems: 'center', gap: '10px', cursor: 'pointer', padding: '10px 15px', backgroundColor: '#f9fafb', borderRadius: '8px', border: '1px solid #e5e7eb' },

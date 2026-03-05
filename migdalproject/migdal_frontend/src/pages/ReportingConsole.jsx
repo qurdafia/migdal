@@ -41,12 +41,15 @@ const ReportingConsole = () => {
     };
 
     return (
-        <div style={{ padding: '30px', fontFamily: 'Inter, sans-serif' }}>
-            <div style={{ marginBottom: '30px' }}>
-                <h1 style={{ margin: '0 0 10px 0', display: 'flex', alignItems: 'center', gap: '10px' }}>
-                    <Calendar size={28} color="#4f46e5" /> Historical Reporting
-                </h1>
-                <p style={{ color: '#6b7280', margin: 0 }}>Generate tabular CSV data separated by device category.</p>
+        <div style={styles.container}>
+            <div style={styles.header}>
+                <div>
+                    <h1 style={styles.title}>
+                        {/* <Calendar size={28} color="#4f46e5" /> Historical Reporting */}
+                        Historical Reporting
+                    </h1>
+                    <p style={styles.subtitle}>Generate tabular CSV data separated by device category.</p>
+                </div>
             </div>
 
             <div style={{ backgroundColor: 'white', padding: '30px', borderRadius: '12px', border: '1px solid #e5e7eb', boxShadow: '0 2px 5px rgba(0,0,0,0.05)', maxWidth: '600px' }}>
@@ -84,6 +87,13 @@ const ReportingConsole = () => {
         </div>
     );
 };
+
+const styles={
+    container: { maxWidth: '1000px', margin: '0 auto', paddingBottom: '40px' },
+    header: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' },
+    title: { display: 'flex', alignItems: 'center', gap: '10px', fontSize: '1.5rem', margin: '0 0 5px 0' },
+    subtitle: { color: '#6b7280', margin: 0, fontSize: '0.95rem' },
+}
 
 const presetBtnStyle = { flex: 1, padding: '10px', backgroundColor: '#f3f4f6', border: '1px solid #d1d5db', borderRadius: '6px', cursor: 'pointer', color: '#374151', fontWeight: '500' };
 const dateInputStyle = { width: '100%', padding: '10px', borderRadius: '6px', border: '1px solid #d1d5db', outline: 'none', color: '#111827' };

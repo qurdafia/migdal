@@ -28,7 +28,7 @@ class AIAnalysisService:
                 return {"error": "Missing API Key in AI Settings."}
 
             # 2. Fetch Data
-            records = list(source.telemetry.all().order_by('-timestamp')[:5])
+            records = list(source.telemetry.all().order_by('-timestamp')[:3])
 
             if not records:
                 return {"error": "No telemetry data found for this device."}

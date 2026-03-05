@@ -1,72 +1,52 @@
 import React, { useState, useEffect } from 'react';
 import api from '../api';
-import { ArrowLeft, Plus, Trash2, Server, Database, Network, Box, Copy, Settings, Edit2, X, Search } from 'lucide-react';
+import { ArrowLeft, Plus, Trash2, Server, Database, Network, Box, Copy, Settings, Edit2, X, Save } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 
 const Inventory = () => {
     const navigate = useNavigate();
     const [devices, setDevices] = useState([]);
     
-    // --- SEARCH & PAGINATION STATES ---
-    const [searchTerm, setSearchTerm] = useState('');
-    const [currentPage, setCurrentPage] = useState(1);
-    const [totalPages, setTotalPages] = useState(1);
-    
     // --- MODAL STATES ---
     const [isDeviceModalOpen, setIsDeviceModalOpen] = useState(false);
     const [isMetricModalOpen, setIsMetricModalOpen] = useState(false);
     
     // --- DATA STATES ---
-    const [selectedDevice, setSelectedDevice] = useState(null); 
-    const [deviceForm, setDeviceForm] = useState({ name: '', type: 'server' }); 
-    const [currentMetrics, setCurrentMetrics] = useState([]); 
-    const [metricForm, setMetricForm] = useState({ label: '', json_path: '', unit: '', threshold_warning: '', threshold_critical: '' });
+    const [selectedDevice, setSelectedDevice] = useState(null); // For Edit or Metric Config
+    const [deviceForm, setDeviceForm] = useState({ name: '', type: 'server' }); // For Add/Edit Device
+    const [currentMetrics, setCurrentMetrics] = useState([]); // List of metrics for the modal
+    // const [metricForm, setMetricForm] = useState({ label: '', json_path: '', unit: '' }); // For Add Metric
+
+    const [metricForm, setMetricForm] = useState({ label: '', json_path: '', unit: '', threshold_warning: '', threshold_critical: '' }); // For Add Metric
+
+    useEffect(() => {
+        fetchDevices();
+    }, []);
 
     // ==========================
     // 1. DEVICE MANAGEMENT
     // ==========================
-    
-    // ⏳ Debounced Fetch: Only triggers after the user stops typing for 500ms
-    useEffect(() => {
-        const delayDebounceFn = setTimeout(() => {
-            fetchDevices();
-        }, 500);
-
-        return () => clearTimeout(delayDebounceFn);
-    }, [searchTerm, currentPage]); // Re-run when search or page changes
-
     const fetchDevices = async () => {
         try {
-            // Pass the search term and page number to your Django view!
-            const res = await api.get('/core/devices/', {
-                params: {
-                    search: searchTerm,
-                    page: currentPage
-                }
-            });
-            
+            const res = await api.get('/core/devices/');
             const rawData = res.data.results || res.data;
-            setDevices(Array.isArray(rawData) ? rawData : []);
-            
-            // Calculate total pages (Assuming default Django REST framework pagination size of 10)
-            if (res.data.count !== undefined) {
-                setTotalPages(Math.ceil(res.data.count / 10) || 1);
-            } else {
-                setTotalPages(1);
-            }
-        } catch (err) { console.error("Load failed", err); }
-    };
 
-    const handleSearchChange = (e) => {
-        setSearchTerm(e.target.value);
-        setCurrentPage(1); // Reset to page 1 whenever the user types a new search
+            console.log(rawData);
+
+            setDevices(Array.isArray(rawData) ? rawData : []);
+        } catch (err) { console.error("Load failed", err); }
     };
 
     const openDeviceModal = (device = null) => {
         if (device) {
+            // Edit Mode
             setSelectedDevice(device);
+
+            // console.log(device.type);
+
             setDeviceForm({ name: device.name, type: device.type });
         } else {
+            // Create Mode
             setSelectedDevice(null);
             setDeviceForm({ name: '', type: 'server' });
         }
@@ -77,11 +57,16 @@ const Inventory = () => {
         e.preventDefault();
         try {
             if (selectedDevice) {
+                // EDIT (PUT)
+                console.log(deviceForm);
+                
                 await api.put(`/core/devices/manage/${selectedDevice.id}/`, {
                     name: deviceForm.name,
                     type: deviceForm.type 
                 });
+
             } else {
+                // CREATE (POST)
                 await api.post('/core/devices/manage/', {
                     name: deviceForm.name,
                     type: deviceForm.type
@@ -89,8 +74,12 @@ const Inventory = () => {
             }
             setIsDeviceModalOpen(false);
             fetchDevices();
-        } catch (err) { alert("Operation failed. Check console for details."); }
+        } catch (err) { 
+            console.error(err);
+            alert("Operation failed. Check console/network tab for details."); 
+        }
     };
+
 
     const handleDeleteDevice = async (id) => {
         if(!window.confirm("Delete this device and ALL history?")) return;
@@ -119,17 +108,31 @@ const Inventory = () => {
     const handleAddMetric = async (e) => {
         e.preventDefault();
         try {
+            // Format payload to handle empty thresholds as null
             const payload = {
                 ...metricForm,
-                warning_threshold: metricForm.threshold_warning === '' ? null : Number(metricForm.threshold_warning),
-                critical_threshold: metricForm.threshold_critical === '' ? null : Number(metricForm.threshold_critical),
+                warning_threshold: metricForm.warning_threshold === '' ? null : Number(metricForm.warning_threshold),
+                critical_threshold: metricForm.critical_threshold === '' ? null : Number(metricForm.critical_threshold),
             };
 
             await api.post(`/core/devices/${selectedDevice.id}/metrics/`, payload);
-            setMetricForm({ label: '', json_path: '', unit: '', threshold_warning: '', threshold_critical: '' }); 
-            loadMetrics(selectedDevice.id); 
+            
+            // Reset form
+            setMetricForm({ label: '', json_path: '', unit: '', threshold_warning: '', threshold_critical: '' });       
+            // setMetricForm({ label: '', json_path: '', unit: '', warning_threshold: '', critical_threshold: '' }); 
+            
+            loadMetrics(selectedDevice.id); // Refresh list
         } catch (e) { alert("Failed to add metric"); }
     };
+
+    // const handleAddMetric = async (e) => {
+    //     e.preventDefault();
+    //     try {
+    //         await api.post(`/core/devices/${selectedDevice.id}/metrics/`, metricForm);
+    //         setMetricForm({ label: '', json_path: '', unit: '' }); // Reset form
+    //         loadMetrics(selectedDevice.id); // Refresh list
+    //     } catch (e) { alert("Failed to add metric"); }
+    // };
 
     const handleDeleteMetric = async (metricId) => {
         try {
@@ -158,92 +161,54 @@ const Inventory = () => {
     return (
         <div style={styles.container}>
             <div style={styles.header}>
-                {/* <div style={{display: 'flex', alignItems: 'center', gap: '20px'}}>
-                    <button onClick={() => navigate('/infrastructure/hypervisor')} style={styles.backBtn}>
-                        <ArrowLeft size={16} /> Dashboard
-                    </button>
-                    <h1 style={styles.title}>Device Inventory</h1>
-                </div> */}
-                <div>
-                    <h1 style={styles.title}>Device Inventory</h1>
-                </div>
+                <button onClick={() => navigate('/infrastructure/hypervisor')} style={styles.backBtn}>
+                    <ArrowLeft size={16} /> Dashboard
+                </button>
+                <h1>Device Inventory</h1>
                 <button onClick={() => openDeviceModal()} style={styles.addBtn}>
                     <Plus size={16} /> Add Device
                 </button>
             </div>
 
-            {/* --- NEW TOOLBAR: SEARCH --- */}
-            <div style={styles.toolbar}>
-                <div style={styles.searchBox}>
-                    <Search size={18} color="#6b7280" />
-                    <input 
-                        type="text" 
-                        placeholder="Search devices by name..." 
-                        value={searchTerm}
-                        onChange={handleSearchChange}
-                        style={styles.searchInput}
-                    />
-                </div>
-            </div>
-
             {/* DEVICE GRID */}
-            {devices.length === 0 ? (
-                <div style={styles.emptyState}>No devices found.</div>
-            ) : (
-                <div style={styles.grid}>
-                    {devices.map(device => (
-                        <div key={device.id} style={styles.card}>
-                            <div style={styles.cardHeader}>
-                                <div style={{display:'flex', alignItems:'center', gap:'10px'}}>
-                                    {getIcon(device.type)}
-                                    <span style={{fontWeight:'bold'}}>{device.name}</span>
-                                </div>
-                                <span style={styles.badge}>{device.type}</span>
+            <div style={styles.grid}>
+                {Array.isArray(devices) && devices.map(device => (
+                    <div key={device.id} style={styles.card}>
+                        <div style={styles.cardHeader}>
+                            <div style={{display:'flex', alignItems:'center', gap:'10px'}}>
+                                {getIcon(device.type)}
+                                <span style={{fontWeight:'bold'}}>{device.name}</span>
                             </div>
-                            
-                            <div style={styles.cardBody}>
-                                <div style={styles.field}>
-                                    <label>API Key (UUID):</label>
-                                    <div style={styles.keyBox} onClick={() => copyToClipboard(device.id)}>
-                                        {device.id.substring(0, 15)}... <Copy size={12} />
-                                    </div>
-                                </div>
-                                <div style={styles.field}>
-                                    <label>IP:</label> 
-                                    <span style={{marginLeft: '5px', fontFamily:'monospace', color:'#666'}}>{device.ip_address || 'N/A'}</span>
+                            <span style={styles.badge}>{device.type}</span>
+                        </div>
+                        
+                        <div style={styles.cardBody}>
+                            <div style={styles.field}>
+                                <label>API Key (UUID):</label>
+                                <div style={styles.keyBox} onClick={() => copyToClipboard(device.id)}>
+                                    {device.id.substring(0, 15)}... <Copy size={12} />
                                 </div>
                             </div>
-
-                            <div style={styles.cardFooter}>
-                                <button onClick={() => openMetricModal(device)} style={styles.iconBtn} title="Configure Metrics">
-                                    <Settings size={16} color="#2563eb"/>
-                                </button>
-                                <button onClick={() => openDeviceModal(device)} style={styles.iconBtn} title="Edit Device">
-                                    <Edit2 size={16} color="#ea580c"/>
-                                </button>
-                                <button onClick={() => handleDeleteDevice(device.id)} style={styles.iconBtn} title="Delete">
-                                    <Trash2 size={16} color="#dc2626"/>
-                                </button>
+                            <div style={styles.field}>
+                                <label>IP:</label> 
+                                <span style={{marginLeft: '5px', fontFamily:'monospace', color:'#666'}}>{device.ip_address || 'N/A'}</span>
                             </div>
                         </div>
-                    ))}
-                </div>
-            )}
 
-            {/* --- NEW PAGINATION CONTROLS --- */}
-            {totalPages > 1 && (
-                <div style={styles.pagination}>
-                    <button disabled={currentPage === 1} onClick={() => setCurrentPage(p => p - 1)} style={styles.pageBtn}>
-                        Previous
-                    </button>
-                    <span style={{ fontSize: '0.9rem', color: '#6b7280' }}>
-                        Page {currentPage} of {totalPages}
-                    </span>
-                    <button disabled={currentPage === totalPages} onClick={() => setCurrentPage(p => p + 1)} style={styles.pageBtn}>
-                        Next
-                    </button>
-                </div>
-            )}
+                        <div style={styles.cardFooter}>
+                            <button onClick={() => openMetricModal(device)} style={styles.iconBtn} title="Configure Metrics">
+                                <Settings size={16} color="#2563eb"/>
+                            </button>
+                            <button onClick={() => openDeviceModal(device)} style={styles.iconBtn} title="Edit Device">
+                                <Edit2 size={16} color="#ea580c"/>
+                            </button>
+                            <button onClick={() => handleDeleteDevice(device.id)} style={styles.iconBtn} title="Delete">
+                                <Trash2 size={16} color="#dc2626"/>
+                            </button>
+                        </div>
+                    </div>
+                ))}
+            </div>
 
             {/* --- MODAL 1: ADD/EDIT DEVICE --- */}
             {isDeviceModalOpen && (
@@ -330,16 +295,20 @@ const Inventory = () => {
                         <form onSubmit={handleAddMetric} style={{backgroundColor:'#f9fafb', padding:'15px', borderRadius:'8px', marginTop: '15px'}}>
                             <h4 style={{margin:'0 0 10px 0'}}>Add New Mapping</h4>
                             
+                            {/* Top Row: Label & Path */}
                             <div style={{display:'flex', gap:'10px', marginBottom: '10px'}}>
                                 <input placeholder="Label (e.g. CPU)" value={metricForm.label} onChange={e=>setMetricForm({...metricForm, label:e.target.value})} required style={{...styles.miniInput, flex: 1}}/>
                                 <input placeholder="Path (e.g. $.cpu)" value={metricForm.json_path} onChange={e=>setMetricForm({...metricForm, json_path:e.target.value})} required style={{...styles.miniInput, flex: 2}}/>
                             </div>
                             
+                            {/* Bottom Row: Unit, Thresholds & Submit */}
                             <div style={{display:'flex', gap:'10px', alignItems: 'center'}}>
+                                {/* Set strict widths so they don't expand and crush the button */}
                                 <input placeholder="Unit (%)" value={metricForm.unit} onChange={e=>setMetricForm({...metricForm, unit:e.target.value})} style={{...styles.miniInput, width: '80px', flex: 'none'}}/>
                                 <input type="number" placeholder="Warn (80)" value={metricForm.threshold_warning} onChange={e=>setMetricForm({...metricForm, threshold_warning:e.target.value})} style={{...styles.miniInput, width: '100px', flex: 'none'}}/>
                                 <input type="number" placeholder="Crit (90)" value={metricForm.threshold_critical} onChange={e=>setMetricForm({...metricForm, threshold_critical:e.target.value})} style={{...styles.miniInput, width: '100px', flex: 'none'}}/>
                                 
+                                {/* Push the button to the far right */}
                                 <div style={{flex: 1, display: 'flex', justifyContent: 'flex-end'}}>
                                     <button type="submit" style={{...styles.saveBtn, padding: '8px 16px', display: 'flex', alignItems: 'center', gap: '5px'}}>
                                         <Plus size={16}/> Add
@@ -347,6 +316,49 @@ const Inventory = () => {
                                 </div>
                             </div>
                         </form>
+                        
+                        {/* List Existing Metrics */}
+                        {/* <div style={{maxHeight:'300px', overflowY:'auto', marginBottom:'20px'}}>
+                            <table style={{width:'100%', borderCollapse:'collapse', fontSize:'0.9rem'}}>
+                                <thead>
+                                    <tr style={{borderBottom:'1px solid #eee', textAlign:'left'}}>
+                                        <th style={{padding:'8px'}}>Label</th>
+                                        <th style={{padding:'8px'}}>JSON Path</th>
+                                        <th style={{padding:'8px'}}>Unit</th>
+                                        <th style={{padding:'8px'}}>Action</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {currentMetrics.length === 0 ? (
+                                        <tr><td colSpan="4" style={{padding:'15px', textAlign:'center', color:'#999'}}>No metrics configured.</td></tr>
+                                    ) : (
+                                        currentMetrics.map(m => (
+                                            <tr key={m.id} style={{borderBottom:'1px solid #f9f9f9'}}>
+                                                <td style={{padding:'8px', fontWeight:'500'}}>{m.label}</td>
+                                                <td style={{padding:'8px', fontFamily:'monospace', color:'#666'}}>{m.json_path}</td>
+                                                <td style={{padding:'8px'}}>{m.unit}</td>
+                                                <td style={{padding:'8px'}}>
+                                                    <button onClick={() => handleDeleteMetric(m.id)} style={{border:'none', background:'none', cursor:'pointer', color:'#dc2626'}}>
+                                                        <Trash2 size={14}/>
+                                                    </button>
+                                                </td>
+                                            </tr>
+                                        ))
+                                    )}
+                                </tbody>
+                            </table>
+                        </div> */}
+
+                        {/* Add New Metric Form */}
+                        {/* <form onSubmit={handleAddMetric} style={{backgroundColor:'#f9fafb', padding:'15px', borderRadius:'8px'}}>
+                            <h4 style={{margin:'0 0 10px 0'}}>Add New Mapping</h4>
+                            <div style={{display:'flex', gap:'10px'}}>
+                                <input placeholder="Label (e.g. CPU)" value={metricForm.label} onChange={e=>setMetricForm({...metricForm, label:e.target.value})} required style={styles.miniInput}/>
+                                <input placeholder="Path (e.g. $.cpu)" value={metricForm.json_path} onChange={e=>setMetricForm({...metricForm, json_path:e.target.value})} required style={{...styles.miniInput, flex:2}}/>
+                                <input placeholder="Unit (%)" value={metricForm.unit} onChange={e=>setMetricForm({...metricForm, unit:e.target.value})} style={{...styles.miniInput, width:'60px'}}/>
+                                <button type="submit" style={styles.saveBtn}><Plus size={16}/></button>
+                            </div>
+                        </form> */}
                     </div>
                 </div>
             )}
@@ -355,23 +367,10 @@ const Inventory = () => {
 };
 
 const styles = {
-    // container: { padding: '30px', fontFamily: 'Inter, sans-serif' },
-    container: { maxWidth: '1000px', margin: '0 auto', paddingBottom: '40px' },
-    header: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' },
-    title: { display: 'flex', alignItems: 'center', gap: '10px', fontSize: '1.5rem', margin: '0 0 5px 0' },
+    container: { padding: '30px', fontFamily: 'Inter, sans-serif' },
+    header: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '30px' },
     backBtn: { background: 'none', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '5px', color: '#666' },
     addBtn: { backgroundColor: '#2563eb', color: 'white', border: 'none', padding: '10px 20px', borderRadius: '6px', cursor: 'pointer', display: 'flex', gap: '5px', alignItems: 'center' },
-    
-    // Search Toolbar Styles
-    toolbar: { display: 'flex', justifyContent: 'space-between', marginBottom: '20px' },
-    searchBox: { display: 'flex', alignItems: 'center', backgroundColor: 'white', padding: '8px 15px', borderRadius: '8px', border: '1px solid #d1d5db', width: '350px', gap: '10px', boxShadow: '0 1px 2px rgba(0,0,0,0.05)' },
-    searchInput: { border: 'none', outline: 'none', width: '100%', fontSize: '0.95rem' },
-    emptyState: { padding: '40px', textAlign: 'center', color: '#6b7280', backgroundColor: 'white', borderRadius: '8px', border: '1px dashed #d1d5db' },
-
-    // Pagination Styles
-    pagination: { display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '15px', marginTop: '30px' },
-    pageBtn: { padding: '8px 16px', borderRadius: '6px', border: '1px solid #d1d5db', backgroundColor: 'white', cursor: 'pointer', color: '#374151' },
-
     grid: { display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: '20px' },
     card: { backgroundColor: 'white', borderRadius: '8px', border: '1px solid #e5e7eb', boxShadow: '0 2px 5px rgba(0,0,0,0.05)', overflow: 'hidden' },
     cardHeader: { padding: '15px', borderBottom: '1px solid #f3f4f6', display: 'flex', justifyContent: 'space-between', alignItems: 'center', backgroundColor: '#f9fafb' },
@@ -383,6 +382,7 @@ const styles = {
     
     iconBtn: { backgroundColor: '#f3f4f6', border: 'none', borderRadius: '6px', padding: '6px', cursor: 'pointer', display:'flex', alignItems:'center', justifyContent:'center', transition:'0.2s' },
 
+    // Modal
     modalOverlay: { position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.5)', display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 100 },
     modal: { backgroundColor: 'white', padding: '30px', borderRadius: '12px', width: '400px', boxShadow: '0 10px 25px rgba(0,0,0,0.2)' },
     modalHeader: { display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'20px', borderBottom:'1px solid #eee', paddingBottom:'10px' },
