@@ -35,28 +35,42 @@ class AIAnalysisService:
                 return {"error": "No telemetry data found for this device."}
             
             # ========================================================
-            # 🛡️ THE CACHE GATEKEEPER
+            # 🛡️ THE ULTIMATE CACHE GATEKEEPER
             # ========================================================
+            latest_record = records[0]
+            last_report = AnalysisReport.objects.filter(source=source).order_by('-created_at').first()
+
+            # SCENARIO A: UI Button Spam Protection
+            # If the most recent AI report was created AFTER the latest telemetry arrived,
+            # it means we have ALREADY analyzed this exact snapshot!
+            
+            if last_report and last_report.created_at >= latest_record.timestamp:
+                print(f"♻️ CACHE HIT (UI): Already analyzed latest data for {source.name}.")
+                return {
+                    "report_id": last_report.id,
+                    "content": last_report.content,
+                    "status": "cached"
+                }
+
+            # SCENARIO B: Ansible Ingest Spam Protection
+            # If the newest payload is mathematically identical to the previous payload,
+            # the server state hasn't changed at all.
+
             if len(records) >= 2:
                 latest_payload = records[0].payload
                 previous_payload = records[1].payload
                 
-                # Python is incredibly smart: it can deep-compare two JSON dictionaries!
-                if latest_payload == previous_payload:
-                    
-                    # They are identical! Let's find the most recent AI report.
-                    last_report = AnalysisReport.objects.filter(source=source).order_by('-created_at').first()
-                    
-                    if last_report:
-                        print(f"♻️ CACHE HIT: No metric changes for {source.name}. Skipping Gemini API.")
-                        return {
-                            "report_id": last_report.id,
-                            "content": last_report.content,
-                            "status": "cached"
-                        }
+                if latest_payload == previous_payload and last_report:
+                    print(f"♻️ CACHE HIT (Payload): No metric changes for {source.name}.")
+                    return {
+                        "report_id": last_report.id,
+                        "content": last_report.content,
+                        "status": "cached"
+                    }
             # ========================================================
 
-            # 2. If data changed (or no previous report exists), proceed as normal
+            # 3. If data changed and no recent report exists, proceed to Gemini
+
             records.reverse()
 
             # Prepare Context
@@ -64,6 +78,7 @@ class AIAnalysisService:
             json_string = json.dumps(data_context, indent=2)
 
             # 3. Build Prompt
+
             # Use the DB template or a fallback default
             base_prompt = template.template_text if template else "Analyze:\n{json_data}"
             full_prompt = base_prompt.replace("{json_data}", json_string)
