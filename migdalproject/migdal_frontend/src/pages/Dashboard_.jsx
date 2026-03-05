@@ -22,17 +22,20 @@ const Dashboard = () => {
     // ==========================================
     // SHARED STATE
     // ==========================================
+
     const [loading, setLoading] = useState(false);
     const [devices, setDevices] = useState([]);
     const [listPage, setListPage] = useState(1);
     const [listTotalPages, setListTotalPages] = useState(1);
+
     const [searchQuery, setSearchQuery] = useState('');
    
+
     // Detail View State
     const [selectedDevice, setSelectedDevice] = useState(null);
     const [telemetry, setTelemetry] = useState([]);
     const [metrics, setMetrics] = useState([]);
-    const [selectedMetric, setSelectedMetric] = useState('all'); 
+    const [selectedMetric, setSelectedMetric] = useState('all'); // NEW: Dropdown State
     const [graphPage, setGraphPage] = useState(1);
     const [graphTotalPages, setGraphTotalPages] = useState(1);
     const [analyzing, setAnalyzing] = useState(false);
@@ -40,9 +43,13 @@ const Dashboard = () => {
     const [showLicenseModal, setShowLicenseModal] = useState(false);
     const [licenseInfo, setLicenseInfo] = useState(null);
 
-    // ==========================================
-    // LIFECYCLE / HOOKS
-    // ==========================================
+    // useEffect(() => {
+    //     const nonDeviceCategories = ['inventory', 'ai-settings', 'email-settings', 'reporting'];
+    //     if (category && !nonDeviceCategories.includes(category)) {
+    //         loadInfrastructureList();
+    //     }
+    // }, [category, deviceId, listPage]);
+
     useEffect(() => {
         const nonDeviceCategories = ['inventory', 'ai-settings', 'email-settings', 'reporting'];
         
@@ -53,27 +60,18 @@ const Dashboard = () => {
         }, 500);
 
         return () => clearTimeout(delayDebounceFn);
+
     }, [category, deviceId, listPage, searchQuery]);
 
-    // ==========================================
-    // HELPER UTILS
-    // ==========================================
-    const getIcon = (type) => {
-        if (!type) return <Server size={20} color="#16a34a" />;
-        switch(type.toLowerCase()) {
-            case 'network': return <Network size={20} color="#2563eb" />;
-            case 'storage': return <Database size={20} color="#9333ea" />;
-            case 'hypervisor': return <Box size={20} color="#ea580c" />;
-            default: return <Server size={20} color="#16a34a" />;
-        }
-    };
 
     // ==========================================
     // DATA FETCHERS
     // ==========================================
+
     const loadInfrastructureList = async () => {
         setLoading(true);
         try {
+
             const res = await api.get('/core/devices/', { 
                 params: { page: listPage, type: category, search: searchQuery } 
             });
@@ -84,7 +82,17 @@ const Dashboard = () => {
                 : [];
 
             setDevices(filtered);
-            setListTotalPages(Math.ceil((res.data.count || filtered.length) / 10) || 1);    
+            setListTotalPages(Math.ceil((res.data.count || filtered.length) / 10) || 1);     
+
+            // const res = await api.get('/core/devices/', { params: { page: listPage, type: category } });
+
+            // const allResults = res.data.results || res.data;
+            // const filtered = Array.isArray(allResults)
+            //     ? allResults.filter(d => d.type.toLowerCase() === category.toLowerCase())
+            //     : [];
+
+            // setDevices(filtered);
+            // setListTotalPages(Math.ceil((res.data.count || filtered.length) / 10) || 1);
 
             if (deviceId) {
                 let found = filtered.find(d => d.id === parseInt(deviceId) || d.id === deviceId);
@@ -119,14 +127,19 @@ const Dashboard = () => {
                 const parsedPayload = {};
                 for (let key in r.payload) {
                     let val = r.payload[key];
+
+                    // Backwards compatibility to clean up old string metrics
                     if (typeof val === 'string') {
+                        // Strip out any letters, %, spaces, or slashes (e.g. "0.17 ms" -> "0.17")
                         const stripped = val.replace(/[a-zA-Z%\s/]/g, '').trim();
+                        // If it's a valid number (and not an IP address with multiple dots), convert it
                         if (stripped !== '' && !isNaN(Number(stripped))) {
                             val = Number(stripped);
                         }
                     }
                     parsedPayload[key] = val;
                 }
+
                 return {
                     id: r.id,
                     timestamp: new Date(r.timestamp).toLocaleTimeString(),
@@ -134,6 +147,10 @@ const Dashboard = () => {
                 };
             });
 
+            // ⚠️ REMOVED THE AUTO-GENERATION BLOCK HERE ⚠️
+            // The frontend will now STRICTLY wait for fetchMetrics to populate the dropdown and graph.
+
+            // Important: reverse the data so it reads left-to-right (oldest to newest) on the graph
             setTelemetry(flatData.reverse());
             setGraphTotalPages(Math.ceil((res.data.count || 0) / 10) || 1);
         } catch (e) { console.error("Telemetry error", e); }
@@ -142,6 +159,7 @@ const Dashboard = () => {
     // ==========================================
     // HEALTH LOGIC ENGINE
     // ==========================================
+
     const calculateHealth = (device) => {
         // 1. Check Offline
         if (device.status !== 'active') {
@@ -171,6 +189,7 @@ const Dashboard = () => {
     // ==========================================
     // ACTION HANDLERS
     // ==========================================
+
     const handleLicenseClick = async () => {
         try { const res = await api.get('/accounts/status/'); setLicenseInfo(res.data); setShowLicenseModal(true); } catch(e) {}
     };
@@ -179,6 +198,7 @@ const Dashboard = () => {
         const ext = type === 'pdf' ? 'pdf' : 'csv';
         const endpoint = type === 'pdf' ? 'download' : 'csv';
         try {
+            // ⚠️ REMOVED the start_date and end_date params since this is now a LIVE report!
             const res = await api.get(`/reports/category/${category}/${endpoint}/`, {
                 responseType: 'blob'
             });
@@ -202,20 +222,7 @@ const Dashboard = () => {
 
     const runAI = async () => {
         setAnalyzing(true);
-        try { 
-            const res = await api.post(`/ai/analyze/${selectedDevice.id}/`); 
-            const data = res.data;
-            
-            // Normalize backend structure & handle caching logic
-            setAnalysisResult({
-                summary: data.summary || data.content,
-                anomaly_detected: data.anomaly_detected !== undefined 
-                    ? data.anomaly_detected 
-                    : (data.content && (data.content.includes("CRITICAL") || data.content.includes("WARN"))),
-                report_id: data.report_id,
-                status: data.status || 'new'
-            }); 
-        } catch (e) { alert("AI Analysis Failed"); }
+        try { const res = await api.post(`/ai/analyze/${selectedDevice.id}/`); setAnalysisResult(res.data); } catch (e) { alert("AI Failed"); }
         setAnalyzing(false);
     };
 
@@ -232,21 +239,17 @@ const Dashboard = () => {
             document.body.appendChild(link);
             link.click();
             link.parentNode.removeChild(link);
-            
-            // ✨ Auto-close the AI drawer after download
-            setTimeout(() => {
-                setAnalysisResult(null);
-            }, 1000);
-
         } catch (err) { console.error("Download failed", err); }
     };
 
     // ==========================================
     // RENDERERS
     // ==========================================
+
     const renderSidebar = () => (
         <div style={styles.sidebar}>
             <div style={styles.brand}><TowerControl size={24} /> Migdal Platform</div>
+            {/* <div style={styles.brand}>Migdal Platform</div> */}
             <div style={styles.menu}>
                 <div style={styles.menuLabel}>INFRASTRUCTURE</div>
                 {['hypervisor', 'network', 'storage', 'server'].map(cat => (
@@ -321,10 +324,7 @@ const Dashboard = () => {
                         return (
                             <div key={d.id} style={styles.card} onClick={() => navigate(`/infrastructure/${category}/${d.id}`)}>
                                 <div style={{display:'flex', justifyContent:'space-between', marginBottom:'10px'}}>
-                                    <div style={{display:'flex', alignItems:'center', gap:'10px'}}>
-                                        {getIcon(d.type)}
-                                        <strong>{d.name}</strong>
-                                    </div>
+                                    <strong>{d.name}</strong>
                                     <span style={styles.ipBadge}>{d.ip_address || d.host_ip}</span>
                                 </div>
                                 <div style={{display:'flex', justifyContent:'space-between', fontSize:'0.85rem', color:'#6b7280'}}>
@@ -356,10 +356,7 @@ const Dashboard = () => {
 
     const renderInfraDetail = () => (
         <>
-            <button onClick={() => {
-                navigate(`/infrastructure/${category}`);
-                setAnalysisResult(null); // Reset drawer state when going back
-            }} style={styles.backBtn}><ArrowLeft size={16}/> Back</button>
+            <button onClick={() => navigate(`/infrastructure/${category}`)} style={styles.backBtn}><ArrowLeft size={16}/> Back</button>
             <div style={styles.topBar}>
                 <h1>{selectedDevice?.name}</h1>
                 <div style={styles.badges}>
@@ -449,35 +446,17 @@ const Dashboard = () => {
                     </ResponsiveContainer>
                 </div>
             </div>
-
-            {/* --- AI ANALYSIS SECTION WITH CACHE BADGE & AUTO-CLOSE --- */}
             <div style={styles.aiCard}>
                 <div style={{display:'flex', justifyContent:'space-between', alignItems:'center'}}>
-                    <div style={{display: 'flex', alignItems: 'center', gap: '10px'}}>
-                        <h3 style={{margin: 0}}><Bot size={18}/> AI Analysis</h3>
-                        {analysisResult && analysisResult.status === 'cached' && (
-                            <span style={{fontSize: '0.75rem', backgroundColor: '#e5e7eb', padding: '2px 8px', borderRadius: '10px', color: '#4b5563', fontWeight: 'bold'}}>
-                                ⚡ Cached Result
-                            </span>
-                        )}
-                    </div>
-                    <button onClick={runAI} disabled={analyzing} style={styles.aiBtn}>
-                        {analyzing ? 'Analyzing...' : <><Play size={16}/> Run Analysis</>}
-                    </button>
+                    <h3><Bot size={18}/> AI Analysis</h3>
+                    <button onClick={runAI} disabled={analyzing} style={styles.aiBtn}>{analyzing ? 'Analyzing...' : <><Play size={16}/> Run Analysis</>}</button>
                 </div>
-                
                 {analysisResult && (
                     <div style={{marginTop:'15px', padding:'15px', borderRadius:'8px', backgroundColor: analysisResult.anomaly_detected ? '#fef2f2' : '#f0fdf4', border: `1px solid ${analysisResult.anomaly_detected ? '#fca5a5' : '#86efac'}`}}>
-                        <h4 style={{color: analysisResult.anomaly_detected ? '#b91c1c' : '#15803d', margin:'0 0 10px 0'}}>
-                            {analysisResult.anomaly_detected ? "⚠️ Issue Detected" : "✅ System Healthy"}
-                        </h4>
-                        
-                        <p style={{fontSize: '0.9rem', lineHeight: '1.5', color: '#374151', whiteSpace: 'pre-wrap'}}>
-                            {analysisResult.summary}
-                        </p>
-                        
-                        <button onClick={downloadPDF} style={{marginTop: '15px', backgroundColor: 'white', border: '1px solid #d1d5db', padding: '8px 15px', borderRadius: '6px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '8px', fontSize: '0.85rem', color: '#374151', fontWeight: '500'}}>
-                            <Download size={14} /> Download PDF & Close
+                        <h4 style={{color: analysisResult.anomaly_detected ? '#b91c1c' : '#15803d', margin:'0 0 10px 0'}}>{analysisResult.anomaly_detected ? "⚠️ Issue" : "✅ Healthy"}</h4>
+                        <p>{analysisResult.summary}</p>
+                        <button onClick={downloadPDF} style={{backgroundColor: 'white', border: '1px solid #d1d5db', padding: '8px 15px', borderRadius: '6px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '8px', fontSize: '0.85rem'}}>
+                            <Download size={14} /> Download Official PDF Report
                         </button>
                     </div>
                 )}
@@ -529,6 +508,7 @@ const Dashboard = () => {
     );
 };
 
+
 const styles = {
     container: { display: 'flex', height: '100vh', backgroundColor: '#f3f4f6', fontFamily: 'Inter, sans-serif' },
     header: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' },
@@ -565,6 +545,7 @@ const styles = {
     metricSelect: { padding: '4px 8px', borderRadius: '6px', border: '1px solid #d1d5db', fontSize: '0.85rem', outline: 'none', cursor: 'pointer', backgroundColor: '#f9fafb' },
     searchBox: { display: 'flex', alignItems: 'center', backgroundColor: 'white', padding: '8px 15px', borderRadius: '8px', border: '1px solid #d1d5db', width: '280px', gap: '10px', boxShadow: '0 1px 2px rgba(0,0,0,0.05)' },
     searchInput: { border: 'none', outline: 'none', width: '100%', fontSize: '0.9rem' },
+    
     aiWarningBox: { 
         backgroundColor: '#fef2f2', 
         border: '1px solid #fecaca', 

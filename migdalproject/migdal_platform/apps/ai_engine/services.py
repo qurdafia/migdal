@@ -24,6 +24,7 @@ class AIAnalysisService:
 
             if not provider:
                 return {"error": "No Active AI Provider configured in Settings."}
+                
             if not provider.api_key:
                 return {"error": "Missing API Key in AI Settings."}
 
@@ -32,7 +33,30 @@ class AIAnalysisService:
 
             if not records:
                 return {"error": "No telemetry data found for this device."}
+            
+            # ========================================================
+            # 🛡️ THE CACHE GATEKEEPER
+            # ========================================================
+            if len(records) >= 2:
+                latest_payload = records[0].payload
+                previous_payload = records[1].payload
+                
+                # Python is incredibly smart: it can deep-compare two JSON dictionaries!
+                if latest_payload == previous_payload:
+                    
+                    # They are identical! Let's find the most recent AI report.
+                    last_report = AnalysisReport.objects.filter(source=source).order_by('-created_at').first()
+                    
+                    if last_report:
+                        print(f"♻️ CACHE HIT: No metric changes for {source.name}. Skipping Gemini API.")
+                        return {
+                            "report_id": last_report.id,
+                            "content": last_report.content,
+                            "status": "cached"
+                        }
+            # ========================================================
 
+            # 2. If data changed (or no previous report exists), proceed as normal
             records.reverse()
 
             # Prepare Context
