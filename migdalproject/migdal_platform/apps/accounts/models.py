@@ -17,16 +17,26 @@ class Organization(models.Model):
 
     @property
     def _decoded_license(self):
-        """Helper property to safely decode the JWT on the fly."""
         if not self.license_key:
             return None
         try:
-            # We read the public key and verify the signature in real-time
             with open("apps/accounts/public_key.pem", 'rb') as f:
                 public_key = f.read()
-            return jwt.decode(self.license_key, public_key, algorithms=["RS256"])
+            
+            decoded = jwt.decode(self.license_key, public_key, algorithms=["RS256"])
+            
+            # 🛡️ THE SECURITY LOCK:
+            # We strip spaces and ignore case for both sides of the comparison
+            jwt_org = str(decoded.get('org_name', '')).strip().lower()
+            db_org = str(self.name).strip().lower()
+
+            if jwt_org == db_org:
+                return decoded
+            
+            # If they don't match, return None (reverts to 5 devices)
+            return None 
         except Exception:
-            return None # If tampered with, it falls back to None
+            return None
 
     @property
     def tier(self):
