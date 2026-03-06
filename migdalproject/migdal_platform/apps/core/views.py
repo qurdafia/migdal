@@ -182,3 +182,12 @@ class EmailConfigView(APIView):
             serializer.save()
             return Response(serializer.data)
         return Response(serializer.errors, status=400)
+
+
+# apps/core/views.py
+
+# def spoof_error_view(request):
+#     """
+#     A temporary endpoint designed to instantly crash Migdal.
+#     """
+#     raise Exception("🚨 MIGDAL MANUAL SABOTAGE TEST: System critical failure simulated! 🚨")

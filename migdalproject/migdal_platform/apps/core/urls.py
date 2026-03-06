@@ -30,6 +30,7 @@ urlpatterns = [
     # DELETE to remove a specific metric config
     path('devices/<uuid:device_id>/metrics/<int:metric_id>/', MetricConfigurationView.as_view(), name='metric-delete'),
     path('email-config/', EmailConfigView.as_view(), name='email-config'),
+    # path('spoof-error/', spoof_error_view, name='spoof-error'),
 ]
 
 
