@@ -28,7 +28,7 @@ class ActivateLicenseView(APIView):
             return Response({"error": "Missing license_key"}, status=400)
         
         try:
-            # 1. Verify Cryptography
+            # 1. Verify Cryptography (Kept your util check for early failing)
             data = verify_license_payload(license_string)
             
             # 2. Check User Organization
@@ -40,15 +40,9 @@ class ActivateLicenseView(APIView):
             if data.get('org_name', '').lower() != org.name.lower():
                 return Response({"error": "License Organization Mismatch"}, status=400)
 
-            # 4. Apply Upgrades
-            org.tier = data['tier']
-            org.max_devices = data['max_devices']
-            
-            # 5. Set Expiry (Timezone Aware)
-            org.license_expiry = datetime.datetime.fromtimestamp(
-                data['exp'], 
-                tz=datetime.timezone.utc
-            )
+            # 4. Apply Upgrades (Zero-Trust Logic!)
+            # We ONLY save the key. The model's @property methods instantly update 
+            # org.tier, org.max_devices, and org.license_expiry dynamically!
             org.license_key = license_string
             org.save()
             
@@ -63,7 +57,6 @@ class ActivateLicenseView(APIView):
         except Exception as e:
             logger.error(f"License Activation Failed: {str(e)}")
             return Response({"error": "Invalid License or Server Error"}, status=400)
-            
 
 @method_decorator(csrf_exempt, name='dispatch')
 class CustomLoginView(ObtainAuthToken):
