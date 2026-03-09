@@ -179,7 +179,7 @@ class CategoryHealthReportView(APIView):
                     payload_data = rec.payload
                     ip = payload_data.get('ip_address') or payload_data.get('host_ip') or "N/A"
                     
-                    c = payload_data.get('cpu_1min') or payload_data.get('cpu_usage') or payload_data.get('cluster_cpu_usage_pct') or "-"
+                    c = payload_data.get('cpu_1min') or payload_data.get('cpu_usage') or payload_data.get('cpu_load') or payload_data.get('cluster_cpu_usage_pct') or "-"
                     m = payload_data.get('memory_usage') or payload_data.get('ram_usage') or "-"
                     
                     metrics_text = f"CPU: {c}%  |  MEM: {m}%"
