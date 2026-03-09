@@ -2,6 +2,8 @@ from django.contrib import admin
 from .models import DataSource, MetricDefinition, TelemetryRecord, EmailConfiguration
 from django import forms
 
+# (Keep your other core admin registrations like DataSource here)
+
 class MetricDefinitionInline(admin.TabularInline):
     """
     Allows adding metrics (e.g., 'CPU Load') directly inside the Device page.
@@ -50,31 +52,53 @@ class EmailConfigurationForm(forms.ModelForm):
             'smtp_password': forms.PasswordInput(render_value=True),
         }
 
+
 @admin.register(EmailConfiguration)
 class EmailConfigurationAdmin(admin.ModelAdmin):
-    form = EmailConfigurationForm 
+    list_display = ('organization', 'smtp_server', 'from_address', 'is_active')
+    search_fields = ('organization__name', 'smtp_server', 'from_address')
+    list_filter = ('is_active',)
     
-    list_display = ['__str__', 'smtp_server', 'from_address', 'is_active']
-    
-    fieldsets = (
-        ('SMTP Server Settings', {
-            'fields': ('smtp_server', 'smtp_port', 'smtp_username', 'smtp_password', 'use_tls')
-        }),
-        ('Routing', {
-            'fields': ('from_address', 'recipient_list', 'is_active')
-        }),
-        ('Email Template', {
-            'fields': ('subject', 'message_body')
-        }),
+    # Optional: Make sure they can select the organization when creating manually
+    fields = (
+        'organization',
+        'is_active',
+        'smtp_server',
+        'smtp_port',
+        'smtp_username',
+        'smtp_password',
+        'use_tls',
+        'from_address',
+        'recipient_list',
+        'subject',
+        'message_body'
     )
 
-    def has_add_permission(self, request):
-        if self.model.objects.exists():
-            return False
-        return True
+# @admin.register(EmailConfiguration)
+# class EmailConfigurationAdmin(admin.ModelAdmin):
+#     form = EmailConfigurationForm 
+    
+#     list_display = ['__str__', 'smtp_server', 'from_address', 'is_active']
+    
+#     fieldsets = (
+#         ('SMTP Server Settings', {
+#             'fields': ('smtp_server', 'smtp_port', 'smtp_username', 'smtp_password', 'use_tls')
+#         }),
+#         ('Routing', {
+#             'fields': ('from_address', 'recipient_list', 'is_active')
+#         }),
+#         ('Email Template', {
+#             'fields': ('subject', 'message_body')
+#         }),
+#     )
 
-    def has_delete_permission(self, request, obj=None):
-        return False
+#     def has_add_permission(self, request):
+#         if self.model.objects.exists():
+#             return False
+#         return True
+
+#     def has_delete_permission(self, request, obj=None):
+#         return False
 
 
 admin.site.register(DataSource, DataSourceAdmin)

@@ -55,25 +55,35 @@ def generate_global_csv(organization):
         
     return buffer.getvalue()
 
+
 def send_consolidated_alerts(device_ids):
     """
-    Accepts a LIST of device_ids, runs AI for all of them, and sends ONE email.
+    Accepts a LIST of device_ids, runs AI for all of them, and sends ONE email
+    using the Organization's specific Email Configuration.
     """
-    config = EmailConfiguration.objects.first()
-    if not config or not config.is_active or not device_ids:
-        print("Email notifications are OFF or no devices updated. Skipping email.")
+    if not device_ids:
+        print("No devices provided. Skipping email.")
         return False
         
     try:
+        # 🛡️ 1. Find the Organization from the first device in the payload
+        first_device = DataSource.objects.get(id=device_ids[0])
+        organization = first_device.organization
+        
+        # 🛡️ 2. Fetch the specific Email Config for THIS Organization
+        config = EmailConfiguration.objects.filter(organization=organization).first()
+        
+        if not config or not config.is_active:
+            print(f"Email notifications are OFF or missing for {organization.name}. Skipping email.")
+            return False
+
         ai_service = AIAnalysisService()
         report_objs = []
         device_names = []
-        organization = None
         
-        # 1. Loop through all triggered devices and run AI
+        # 3. Loop through all triggered devices and run AI
         for d_id in device_ids:
             device = DataSource.objects.get(id=d_id)
-            organization = device.organization # Save the org for the CSV
             device_names.append(device.name)
             
             print(f"🧠 Running AI Analysis for {device.name}...")
@@ -84,22 +94,21 @@ def send_consolidated_alerts(device_ids):
                 if report:
                     report_objs.append(report)
 
-        # 2. Build ONE combined PDF (Pass the LIST of reports to the template)
+        # 4. Build ONE combined PDF
         pdf_bytes = None
         if report_objs:
             print(f"📄 Rendering combined multi-page AI PDF...")
             context = {
-                'reports': report_objs,  # Notice this is plural now!
+                'reports': report_objs,
                 'generated_at': timezone.localtime(timezone.now()).strftime('%Y-%m-%d %H:%M:%S')
-                # 'generated_at': timezone.now().strftime('%Y-%m-%d %H:%M:%S')
             }
             pdf_bytes = render_to_pdf('reports/consolidated_analysis_pdf.html', context)
 
-        # 3. Build the Master CSV
-        print(f"📊 Generating global fleet health CSV...")
+        # 5. Build the Master CSV for THIS Organization
+        print(f"📊 Generating global fleet health CSV for {organization.name}...")
         csv_string = generate_global_csv(organization)
 
-        # 4. Connect to SMTP and Send ONE Email
+        # 6. Connect to SMTP and Send ONE Email using the Org's credentials
         connection = get_connection(
             host=config.smtp_server, port=config.smtp_port,
             username=config.smtp_username, password=config.smtp_password,
@@ -124,9 +133,86 @@ def send_consolidated_alerts(device_ids):
             email.attach('Global_Fleet_Health.csv', csv_string, 'text/csv')
             
         email.send()
-        print(f"✅ ONE master email sent with {len(report_objs)} AI reports and the Global CSV!")
+        print(f"✅ ONE master email sent to {organization.name} with {len(report_objs)} AI reports!")
         return True
         
     except Exception as e:
         print(f"❌ Batch Alert Pipeline Failed: {e}")
         return False
+        
+
+# def send_consolidated_alerts(device_ids):
+#     """
+#     Accepts a LIST of device_ids, runs AI for all of them, and sends ONE email.
+#     """
+#     config = EmailConfiguration.objects.first()
+#     if not config or not config.is_active or not device_ids:
+#         print("Email notifications are OFF or no devices updated. Skipping email.")
+#         return False
+        
+#     try:
+#         ai_service = AIAnalysisService()
+#         report_objs = []
+#         device_names = []
+#         organization = None
+        
+#         # 1. Loop through all triggered devices and run AI
+#         for d_id in device_ids:
+#             device = DataSource.objects.get(id=d_id)
+#             organization = device.organization # Save the org for the CSV
+#             device_names.append(device.name)
+            
+#             print(f"🧠 Running AI Analysis for {device.name}...")
+#             ai_result = ai_service.analyze_device(d_id)
+            
+#             if "report_id" in ai_result:
+#                 report = AnalysisReport.objects.filter(id=ai_result["report_id"]).first()
+#                 if report:
+#                     report_objs.append(report)
+
+#         # 2. Build ONE combined PDF (Pass the LIST of reports to the template)
+#         pdf_bytes = None
+#         if report_objs:
+#             print(f"📄 Rendering combined multi-page AI PDF...")
+#             context = {
+#                 'reports': report_objs,  # Notice this is plural now!
+#                 'generated_at': timezone.localtime(timezone.now()).strftime('%Y-%m-%d %H:%M:%S')
+#                 # 'generated_at': timezone.now().strftime('%Y-%m-%d %H:%M:%S')
+#             }
+#             pdf_bytes = render_to_pdf('reports/consolidated_analysis_pdf.html', context)
+
+#         # 3. Build the Master CSV
+#         print(f"📊 Generating global fleet health CSV...")
+#         csv_string = generate_global_csv(organization)
+
+#         # 4. Connect to SMTP and Send ONE Email
+#         connection = get_connection(
+#             host=config.smtp_server, port=config.smtp_port,
+#             username=config.smtp_username, password=config.smtp_password,
+#             use_tls=config.use_tls, fail_silently=False,
+#         )
+        
+#         device_list_text = "\n".join([f"- {name}" for name in device_names])
+#         body_text = f"{config.message_body}\n\nThe following devices reported new telemetry:\n{device_list_text}\n\nAttached is the combined AI diagnosis PDF and the global fleet health CSV."
+        
+#         email = EmailMessage(
+#             subject=f"{config.subject} - {len(device_ids)} Devices Updated",
+#             body=body_text,
+#             from_email=config.from_address,
+#             to=[email.strip() for email in config.recipient_list.split(',')],
+#             connection=connection,
+#         )
+        
+#         if pdf_bytes:
+#             email.attach('Combined_AI_Analysis.pdf', pdf_bytes, 'application/pdf')
+            
+#         if csv_string:
+#             email.attach('Global_Fleet_Health.csv', csv_string, 'text/csv')
+            
+#         email.send()
+#         print(f"✅ ONE master email sent with {len(report_objs)} AI reports and the Global CSV!")
+#         return True
+        
+#     except Exception as e:
+#         print(f"❌ Batch Alert Pipeline Failed: {e}")
+#         return False

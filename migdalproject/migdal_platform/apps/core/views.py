@@ -165,23 +165,45 @@ class DeviceManagementView(generics.CreateAPIView, generics.RetrieveUpdateDestro
 
     def perform_create(self, serializer):
         serializer.save(organization=self.request.user.organization, active=True)
+        
 
 # --- 6. EMAIL CONFIG VIEW ---
 class EmailConfigView(APIView):
     permission_classes = [IsAuthenticated]
 
     def get(self, request):
-        config, created = EmailConfiguration.objects.get_or_create(id=1)
+        # 🛡️ Strictly fetch the config for THIS user's organization
+        config, created = EmailConfiguration.objects.get_or_create(organization=request.user.organization)
         serializer = EmailConfigurationSerializer(config)
         return Response(serializer.data)
 
     def put(self, request):
-        config, created = EmailConfiguration.objects.get_or_create(id=1)
+        # 🛡️ Strictly update the config for THIS user's organization
+        config, created = EmailConfiguration.objects.get_or_create(organization=request.user.organization)
         serializer = EmailConfigurationSerializer(config, data=request.data, partial=True)
+        
         if serializer.is_valid():
             serializer.save()
             return Response(serializer.data)
         return Response(serializer.errors, status=400)
+
+
+# --- 6. EMAIL CONFIG VIEW ---
+# class EmailConfigView(APIView):
+#     permission_classes = [IsAuthenticated]
+
+#     def get(self, request):
+#         config, created = EmailConfiguration.objects.get_or_create(id=1)
+#         serializer = EmailConfigurationSerializer(config)
+#         return Response(serializer.data)
+
+#     def put(self, request):
+#         config, created = EmailConfiguration.objects.get_or_create(id=1)
+#         serializer = EmailConfigurationSerializer(config, data=request.data, partial=True)
+#         if serializer.is_valid():
+#             serializer.save()
+#             return Response(serializer.data)
+#         return Response(serializer.errors, status=400)
 
 
 # apps/core/views.py
