@@ -73,7 +73,7 @@ class CategoryHealthReportView(APIView):
             # Extract CPU (Try common keys)
             # FIX: Use 'payload_data' instead of 'p' to avoid variable conflict
             payload_data = record.payload 
-            cpu = payload_data.get('cpu_1min') or payload_data.get('cpu_usage') or payload_data.get('cluster_cpu_usage_pct') or 0
+            cpu = payload_data.get('cpu_1min') or payload_data.get('cpu_usage') or payload_data.get('cpu_load') or payload_data.get('cluster_cpu_usage_pct') or 0
             mem = payload_data.get('memory_usage') or payload_data.get('ram_usage') or 0
             
             try: cpu = float(cpu)
@@ -109,7 +109,7 @@ class CategoryHealthReportView(APIView):
                 if rec and rec.payload:
                     payload_data = rec.payload
                     ip = payload_data.get('ip_address') or payload_data.get('host_ip') or "N/A"
-                    cpu = payload_data.get('cpu_1min') or payload_data.get('cpu_usage') or payload_data.get('cluster_cpu_usage_pct') or "N/A"
+                    cpu = payload_data.get('cpu_1min') or payload_data.get('cpu_usage') or payload_data.get('cpu_load') or payload_data.get('cluster_cpu_usage_pct') or "N/A"
                     mem = payload_data.get('memory_usage') or payload_data.get('ram_usage') or "N/A"
 
                 writer.writerow([
@@ -323,7 +323,7 @@ class HistoricalReportView(APIView):
                     payload_data = rec.payload or {}
                     ip = payload_data.get('ip_address') or payload_data.get('host_ip') or "N/A"
                     
-                    c_val = payload_data.get('cpu_1min') or payload_data.get('cpu_usage') or payload_data.get('cluster_cpu_usage_pct') or 0
+                    c_val = payload_data.get('cpu_1min') or payload_data.get('cpu_usage') or payload_data.get('cpu_load') or payload_data.get('cluster_cpu_usage_pct') or 0
                     m_val = payload_data.get('memory_usage') or payload_data.get('ram_usage') or 0
                     
                     try: float_c = float(c_val)
