@@ -551,7 +551,7 @@ const styles = {
     btnGreen: { backgroundColor:'#10b981', color:'white', border:'none', padding:'6px 12px', borderRadius:'6px', cursor:'pointer', display:'flex', gap:'5px', alignItems:'center' },
     aiBtn: { backgroundColor:'#8b5cf6', color:'white', border:'none', padding:'8px 16px', borderRadius:'6px', cursor:'pointer', display:'flex', gap:'5px', alignItems:'center', fontWeight:'600' },
     backBtn: { background:'none', border:'none', cursor:'pointer', display:'flex', gap:'5px', marginBottom:'15px', color:'#6b7280' },
-    ipBadge: { backgroundColor:'#f3f4f6', padding:'2px 8px', borderRadius:'4px', fontSize:'0.8rem', color:'#6b7280' },
+    ipBadge: { backgroundColor:'#f3f4f6', padding:'2px 8px', borderRadius:'4px', fontSize:'0.8rem', color:'#6b7280', overflow:'hidden' },
     licenseBadge: { backgroundColor:'#d1fae5', padding:'4px 8px', borderRadius:'12px', fontSize:'0.8rem', color:'#065f46', display:'flex', gap:'5px', alignItems:'center' },
     badges: { display:'flex', gap:'10px' },
     pagination: { marginTop:'20px', display:'flex', justifyContent:'center', gap:'10px' },
