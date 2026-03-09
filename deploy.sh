@@ -7,12 +7,14 @@ echo "🚀 INITIATING MIGDAL PRODUCTION DEPLOYMENT..."
 
 echo "------------------------------------------------"
 echo "💾 STEP 1: Backing up the PostgreSQL database..."
-# Creates a backups folder if it doesn't exist yet
 mkdir -p db_backups
 
-# Dumps the database into a timestamped SQL file
-podman-compose -f docker-compose.prod.yml exec -T -e PGPASSWORD="PasswordMigdal2026!" db pg_dump -U migdal_user migdal_prod > db_backups/migdal_backup_$(date +%Y%m%d_%H%M%S).sql
-# podman-compose -f docker-compose.prod.yml exec -T db pg_dump -U postgres postgres > db_backups/migdal_backup_$(date +%Y%m%d_%H%M%S).sql
+# 1. Securely extract the DATABASE_URL string from .env.prod
+DB_URL=$(grep '^DATABASE_URL=' .env.prod | cut -d '=' -f2-)
+
+# 2. Pass the entire URL to pg_dump (No hardcoded passwords!)
+podman-compose -f docker-compose.prod.yml exec -T db pg_dump "$DB_URL" > db_backups/migdal_backup_$(date +%Y%m%d_%H%M%S).sql
+
 echo "✅ Backup successfully saved in the db_backups/ directory!"
 
 echo "🧹 STEP 1.5: Cleaning up backups older than 30 days..."
