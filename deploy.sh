@@ -9,16 +9,14 @@ echo "------------------------------------------------"
 echo "💾 STEP 1: Backing up the PostgreSQL database..."
 mkdir -p db_backups
 
-# 1. Securely extract the DATABASE_URL string from .env.prod
+# Securely extract the DATABASE_URL string from .env.prod
 DB_URL=$(grep '^DATABASE_URL=' .env.prod | cut -d '=' -f2-)
 
-# 2. Pass the entire URL to pg_dump (No hardcoded passwords!)
+# Pass the entire URL to pg_dump (No hardcoded passwords!)
 podman-compose -f docker-compose.prod.yml exec -T db pg_dump "$DB_URL" > db_backups/migdal_backup_$(date +%Y%m%d_%H%M%S).sql
-
 echo "✅ Backup successfully saved in the db_backups/ directory!"
 
 echo "🧹 STEP 1.5: Cleaning up backups older than 30 days..."
-# Finds and deletes any .sql files in the backup folder older than 30 days
 find db_backups/ -type f -name "*.sql" -mtime +30 -exec rm {} \;
 echo "✅ Old backups cleaned up!"
 
