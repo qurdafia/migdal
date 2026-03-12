@@ -1,14 +1,32 @@
 from django.contrib import admin
 from .models import Credential, ExecutionEnvironment, Playbook, AutomationJob, JobRun
+from django import forms
+
+
+# 🛡️ Create a custom secure form for the Admin panel
+class CredentialAdminForm(forms.ModelForm):
+    class Meta:
+        model = Credential
+        fields = '__all__'
+        widgets = {
+            # render_value=False ensures the password isn't sent to the HTML source code
+            'secret': forms.PasswordInput(render_value=False)
+        }
 
 @admin.register(Credential)
 class CredentialAdmin(admin.ModelAdmin):
-    list_display = ('name', 'credential_type', 'username', 'organization')
+    form = CredentialAdminForm
+    list_display = ('name', 'credential_type', 'username')
     search_fields = ('name', 'username')
-    list_filter = ('credential_type', 'organization')
+
+# @admin.register(Credential)
+# class CredentialAdmin(admin.ModelAdmin):
+#     list_display = ('name', 'credential_type', 'username', 'organization')
+#     search_fields = ('name', 'username')
+#     list_filter = ('credential_type', 'organization')
     
-    # We do NOT put 'secret' in list_display for security reasons!
-    fields = ('organization', 'name', 'credential_type', 'username', 'secret')
+#     # We do NOT put 'secret' in list_display for security reasons!
+#     fields = ('organization', 'name', 'credential_type', 'username', 'secret')
 
 @admin.register(ExecutionEnvironment)
 class ExecutionEnvironmentAdmin(admin.ModelAdmin):

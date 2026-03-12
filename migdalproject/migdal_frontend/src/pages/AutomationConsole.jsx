@@ -35,6 +35,8 @@ const AutomationConsole = () => {
     const [showCredModal, setShowCredModal] = useState(false);
     const [credForm, setCredForm] = useState({ id: null, name: '', credential_type: 'machine', username: '', secret: '' });
 
+    const [showSecret, setShowSecret] = useState(false);
+
     // ==========================================
     // STATE: ENVIRONMENTS
     // ==========================================
@@ -131,7 +133,11 @@ const AutomationConsole = () => {
     // MODAL OPENERS (For Editing)
     // ==========================================
     const openEditPlaybook = (pb) => { setPlaybookForm(pb); setShowPlaybookModal(true); };
-    const openEditCred = (c) => { setCredForm({ ...c, secret: '' }); setShowCredModal(true); }; // Secret blank for security
+    const openEditCred = (c) => { 
+        setCredForm({ ...c, secret: '' }); 
+        setShowSecret(false);
+        setShowCredModal(true); 
+    };
     const openEditEnv = (e) => { 
         setEnvForm({ ...e, collections_json: JSON.stringify(e.collections_json, null, 2), python_packages_json: JSON.stringify(e.python_packages_json, null, 2) }); 
         setShowEnvModal(true); 
@@ -380,8 +386,34 @@ const AutomationConsole = () => {
                             </select>
                             <label style={styles.label}>Username</label>
                             <input style={styles.input} value={credForm.username} onChange={e => setCredForm({...credForm, username: e.target.value})} />
-                            <label style={styles.label}>Secret {credForm.id && "(Leave blank to keep existing)"}</label>
-                            <textarea style={{...styles.input, height:'100px', fontFamily:'monospace'}} placeholder="Password or SSH Private Key" value={credForm.secret} onChange={e => setCredForm({...credForm, secret: e.target.value})} />
+                            {/* THE SECURE SECRET TOGGLE */}
+                            <div style={{display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px'}}>
+                                <label style={{...styles.label, marginBottom: 0}}>Secret {credForm.id && "(Leave blank to keep existing)"}</label>
+                                <button 
+                                    type="button" 
+                                    onClick={() => setShowSecret(!showSecret)} 
+                                    style={{fontSize: '0.75rem', color: '#4f46e5', background: 'none', border: 'none', cursor: 'pointer', fontWeight: 'bold'}}
+                                >
+                                    {showSecret ? 'Hide Secret' : 'Show / Paste SSH Key'}
+                                </button>
+                            </div>
+                            
+                            {showSecret ? (
+                                <textarea 
+                                    style={{...styles.input, height:'100px', fontFamily:'monospace'}} 
+                                    placeholder="Paste multiline SSH Private Key here..." 
+                                    value={credForm.secret} 
+                                    onChange={e => setCredForm({...credForm, secret: e.target.value})} 
+                                />
+                            ) : (
+                                <input 
+                                    type="password" 
+                                    style={styles.input} 
+                                    placeholder="Enter Password..." 
+                                    value={credForm.secret} 
+                                    onChange={e => setCredForm({...credForm, secret: e.target.value})} 
+                                />
+                            )}
                         </div>
                         <div style={styles.modalFooter}>
                             <button style={styles.btnPrimary} onClick={() => handleSave('credentials', credForm, fetchCredentials, setShowCredModal, () => {})}>Encrypt & Save</button>

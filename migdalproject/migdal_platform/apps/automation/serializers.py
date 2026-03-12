@@ -1,15 +1,23 @@
 from rest_framework import serializers
-from .models import Credential, ExecutionEnvironment, Playbook, AutomationJob, JobRun
+from .models import Credential, AutomationJob, Playbook, ExecutionEnvironment, JobRun
 
 class CredentialSerializer(serializers.ModelSerializer):
     class Meta:
         model = Credential
-        fields = ['id', 'name', 'credential_type', 'username', 'secret', 'created_at']
+        fields = '__all__'
+        # 🛡️ 1. Tell the API to NEVER send this field back in a GET request
         extra_kwargs = {
-            # 🛡️ THE IRON CLAD SECURITY RULE:
-            # React can POST the secret to save it, but Django will NEVER include it in a GET request.
-            'secret': {'write_only': True} 
+            'secret': {'write_only': True}
         }
+
+    def update(self, instance, validated_data):
+        # 🛡️ 2. If the frontend sends a blank secret during an edit, 
+        # ignore it so we don't overwrite the existing encrypted password.
+        if 'secret' in validated_data and not validated_data['secret'].strip():
+            validated_data.pop('secret')
+            
+        return super().update(instance, validated_data)
+
 
 class ExecutionEnvironmentSerializer(serializers.ModelSerializer):
     class Meta:

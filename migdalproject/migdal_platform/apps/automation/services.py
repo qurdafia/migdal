@@ -167,13 +167,6 @@ def execute_job_run(job_run_id):
             envvars=custom_env  # <-- Pass the environment variables here!
         )
 
-        # # Fire Ansible Runner
-        # r = ansible_runner.run(
-        #     private_data_dir=temp_dir,
-        #     playbook='main.yml',
-        #     quiet=True 
-        # )
-
         run.status = 'successful' if r.rc == 0 else 'failed'
         
         # Combine the setup logs with the actual playbook execution logs
