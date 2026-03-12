@@ -131,13 +131,15 @@ const AutomationConsole = () => {
         const pollLogs = async () => {
             if (!activeRunId) return;
             try {
-                const res = await api.get(`automation/runs/${activeRunId}/`);
+                // 👇 CHANGE THIS LINE from 'automation/runs/...' to 'automation/job-runs/...'
+                const res = await api.get(`automation/job-runs/${activeRunId}/`);
+                
                 setRunStatus(res.data.status);
                 if (res.data.stdout) setLiveLogs(res.data.stdout);
                 
                 if (['successful', 'failed', 'canceled'].includes(res.data.status)) {
                     clearInterval(pollInterval);
-                    fetchRuns(); // Refresh runs list once job finishes
+                    fetchRuns(); 
                 }
             } catch (e) { console.error(e); }
         };

@@ -10,7 +10,7 @@ router.register(r'credentials', CredentialViewSet)
 router.register(r'environments', ExecutionEnvironmentViewSet)
 router.register(r'playbooks', PlaybookViewSet)
 router.register(r'jobs', AutomationJobViewSet)
-router.register(r'runs', JobRunViewSet, basename='jobrun')
+router.register(r'job-runs', JobRunViewSet, basename='jobrun')
 
 urlpatterns = [
     path('', include(router.urls)),

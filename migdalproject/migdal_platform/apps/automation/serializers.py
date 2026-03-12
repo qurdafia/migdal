@@ -35,8 +35,8 @@ class AutomationJobSerializer(serializers.ModelSerializer):
         fields = ['id', 'name', 'playbook', 'environment', 'credential', 'targets', 'cron_schedule', 'is_active']
 
 class JobRunSerializer(serializers.ModelSerializer):
+    job_name = serializers.CharField(source='job.name', read_only=True)
+
     class Meta:
         model = JobRun
-        fields = ['id', 'job', 'status', 'stdout', 'started_at', 'finished_at']
-        # 🛡️ Logs are strictly read-only. The frontend cannot fake a successful run.
-        read_only_fields = ['status', 'stdout', 'started_at', 'finished_at']
+        fields = ['id', 'job', 'job_name', 'status', 'stdout', 'created_at', 'finished_at']
