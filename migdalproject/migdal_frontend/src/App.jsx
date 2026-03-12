@@ -10,7 +10,6 @@ import Dashboard from './pages/Dashboard';
 
 // Import Components
 import ProtectedRoute from './components/ProtectedRoute';
-import AutomationJobsList from './pages/AutomationJobsList';
 import AutomationConsole from './pages/AutomationConsole';
 
 function App() {

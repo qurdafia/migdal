@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import api from '../api';
-import { Terminal, FileCode, Key, Box, Plus, Save, X, Play, Edit2, Trash2 } from 'lucide-react';
+import { Terminal, FileCode, Key, Box, Plus, Save, X, Play, Edit2, Trash2, Activity } from 'lucide-react';
 import Editor from '@monaco-editor/react';
 
 const AutomationConsole = () => {
@@ -22,6 +22,13 @@ const AutomationConsole = () => {
     const [jobForm, setJobForm] = useState({ id: null, name: '', playbook: '', environment: '', credential: '', targets: [], cron_schedule: '', is_active: true });
 
     // ==========================================
+    // STATE: RUNS (EXECUTION HISTORY)
+    // ==========================================
+    const [runs, setRuns] = useState([]);
+    const [selectedRun, setSelectedRun] = useState(null);
+    const [showRunModal, setShowRunModal] = useState(false);
+
+    // ==========================================
     // STATE: PLAYBOOKS
     // ==========================================
     const [playbooks, setPlaybooks] = useState([]);
@@ -34,7 +41,6 @@ const AutomationConsole = () => {
     const [credentials, setCredentials] = useState([]);
     const [showCredModal, setShowCredModal] = useState(false);
     const [credForm, setCredForm] = useState({ id: null, name: '', credential_type: 'machine', username: '', secret: '' });
-
     const [showSecret, setShowSecret] = useState(false);
 
     // ==========================================
@@ -48,11 +54,12 @@ const AutomationConsole = () => {
     // LIFECYCLE ROUTER
     // ==========================================
     useEffect(() => {
-        fetchDevices(); // Always need devices for the Job builder
+        fetchDevices();
         fetchPlaybooks();
         fetchCredentials();
         fetchEnvironments();
         fetchJobs();
+        fetchRuns();
     }, []);
 
     // ==========================================
@@ -63,6 +70,14 @@ const AutomationConsole = () => {
     };
     const fetchJobs = async () => {
         try { const res = await api.get('automation/jobs/'); setJobs(res.data.results || res.data || []); } catch (e) { console.error(e); }
+    };
+    const fetchRuns = async () => {
+        try { 
+            const res = await api.get('automation/job-runs/'); 
+            const data = res.data.results || res.data || [];
+            // Sort to show newest first
+            setRuns(data.sort((a, b) => b.id - a.id)); 
+        } catch (e) { console.error(e); }
     };
     const fetchPlaybooks = async () => {
         try { const res = await api.get('automation/playbooks/'); setPlaybooks(res.data.results || res.data || []); } catch (e) { console.error(e); }
@@ -107,6 +122,7 @@ const AutomationConsole = () => {
         try {
             const res = await api.post(`automation/jobs/${jobId}/execute/`);
             if (res.data.run_id) setActiveRunId(res.data.run_id);
+            fetchRuns(); // Refresh runs immediately to show pending job
         } catch (error) { setLiveLogs("Critical Error: Could not reach the Migdal backend."); }
     };
 
@@ -118,7 +134,11 @@ const AutomationConsole = () => {
                 const res = await api.get(`automation/runs/${activeRunId}/`);
                 setRunStatus(res.data.status);
                 if (res.data.stdout) setLiveLogs(res.data.stdout);
-                if (['successful', 'failed', 'canceled'].includes(res.data.status)) clearInterval(pollInterval);
+                
+                if (['successful', 'failed', 'canceled'].includes(res.data.status)) {
+                    clearInterval(pollInterval);
+                    fetchRuns(); // Refresh runs list once job finishes
+                }
             } catch (e) { console.error(e); }
         };
 
@@ -135,7 +155,7 @@ const AutomationConsole = () => {
     const openEditPlaybook = (pb) => { setPlaybookForm(pb); setShowPlaybookModal(true); };
     const openEditCred = (c) => { 
         setCredForm({ ...c, secret: '' }); 
-        setShowSecret(false);
+        setShowSecret(false); // Force hidden on open
         setShowCredModal(true); 
     };
     const openEditEnv = (e) => { 
@@ -147,6 +167,48 @@ const AutomationConsole = () => {
     // ==========================================
     // RENDERERS
     // ==========================================
+    const renderRunsTab = () => (
+        <div>
+            <div style={styles.headerRow}>
+                <h2 style={styles.sectionTitle}>Execution History</h2>
+                <button style={styles.btnPrimary} onClick={fetchRuns}>↻ Refresh</button>
+            </div>
+            <div style={styles.card}>
+                <table style={styles.table}>
+                    <thead style={styles.th}>
+                        <tr>
+                            <th style={styles.thItem}>Run ID</th>
+                            <th style={styles.thItem}>Job Name</th>
+                            <th style={styles.thItem}>Status</th>
+                            <th style={styles.thItem}>Finished At</th>
+                            <th style={{...styles.thItem, textAlign: 'right'}}>Logs</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {runs.map(run => (
+                            <tr key={run.id} style={styles.tr}>
+                                <td style={styles.td}>#{run.id}</td>
+                                <td style={styles.td}><strong>{run.job_name || `Job ID: ${run.job}`}</strong></td>
+                                <td style={styles.td}>
+                                    <span style={run.status === 'successful' ? styles.badgeActive : run.status === 'failed' ? styles.badgeInactive : styles.badgeDark}>
+                                        {run.status ? run.status.toUpperCase() : 'UNKNOWN'}
+                                    </span>
+                                </td>
+                                <td style={styles.td}>{run.finished_at ? new Date(run.finished_at).toLocaleString() : 'Running...'}</td>
+                                <td style={{...styles.td, textAlign: 'right'}}>
+                                    <button onClick={() => { setSelectedRun(run); setShowRunModal(true); }} style={styles.btnSecondary}>
+                                        View Output
+                                    </button>
+                                </td>
+                            </tr>
+                        ))}
+                        {runs.length === 0 && <tr><td colSpan="5" style={{...styles.td, textAlign:'center'}}>No runs recorded yet.</td></tr>}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    );
+
     const renderJobsTab = () => (
         <div>
             <div style={styles.headerRow}>
@@ -155,10 +217,16 @@ const AutomationConsole = () => {
                     <Plus size={16} /> Create Job
                 </button>
             </div>
-            
             <div style={styles.card}>
                 <table style={styles.table}>
-                    <thead style={styles.th}><tr><th>Job Name</th><th>Schedule</th><th>Status</th><th style={{textAlign: 'right'}}>Actions</th></tr></thead>
+                    <thead style={styles.th}>
+                        <tr>
+                            <th style={styles.thItem}>Job Name</th>
+                            <th style={styles.thItem}>Schedule</th>
+                            <th style={styles.thItem}>Status</th>
+                            <th style={{...styles.thItem, textAlign: 'right'}}>Actions</th>
+                        </tr>
+                    </thead>
                     <tbody>
                         {jobs.map(job => (
                             <tr key={job.id} style={styles.tr}>
@@ -203,7 +271,14 @@ const AutomationConsole = () => {
             </div>
             <div style={styles.card}>
                 <table style={styles.table}>
-                    <thead style={styles.th}><tr><th>Name</th><th>Description</th><th>Updated</th><th style={{textAlign: 'right'}}>Actions</th></tr></thead>
+                    <thead style={styles.th}>
+                        <tr>
+                            <th style={styles.thItem}>Name</th>
+                            <th style={styles.thItem}>Description</th>
+                            <th style={styles.thItem}>Updated</th>
+                            <th style={{...styles.thItem, textAlign: 'right'}}>Actions</th>
+                        </tr>
+                    </thead>
                     <tbody>
                         {playbooks.map(pb => (
                             <tr key={pb.id} style={styles.tr}>
@@ -233,7 +308,14 @@ const AutomationConsole = () => {
             </div>
             <div style={styles.card}>
                 <table style={styles.table}>
-                    <thead style={styles.th}><tr><th>Name</th><th>Type</th><th>Username</th><th style={{textAlign: 'right'}}>Actions</th></tr></thead>
+                    <thead style={styles.th}>
+                        <tr>
+                            <th style={styles.thItem}>Name</th>
+                            <th style={styles.thItem}>Type</th>
+                            <th style={styles.thItem}>Username</th>
+                            <th style={{...styles.thItem, textAlign: 'right'}}>Actions</th>
+                        </tr>
+                    </thead>
                     <tbody>
                         {credentials.map(c => (
                             <tr key={c.id} style={styles.tr}>
@@ -263,7 +345,12 @@ const AutomationConsole = () => {
             </div>
             <div style={styles.card}>
                 <table style={styles.table}>
-                    <thead style={styles.th}><tr><th>Environment Name</th><th style={{textAlign: 'right'}}>Actions</th></tr></thead>
+                    <thead style={styles.th}>
+                        <tr>
+                            <th style={styles.thItem}>Environment Name</th>
+                            <th style={{...styles.thItem, textAlign: 'right'}}>Actions</th>
+                        </tr>
+                    </thead>
                     <tbody>
                         {environments.map(e => (
                             <tr key={e.id} style={styles.tr}>
@@ -289,6 +376,7 @@ const AutomationConsole = () => {
             {/* TABS */}
             <div style={styles.tabContainer}>
                 <button style={activeTab === 'jobs' ? styles.tabActive : styles.tabInactive} onClick={() => setActiveTab('jobs')}><Terminal size={18} /> Jobs</button>
+                <button style={activeTab === 'runs' ? styles.tabActive : styles.tabInactive} onClick={() => setActiveTab('runs')}><Activity size={18} /> Runs History</button>
                 <button style={activeTab === 'playbooks' ? styles.tabActive : styles.tabInactive} onClick={() => setActiveTab('playbooks')}><FileCode size={18} /> Playbooks</button>
                 <button style={activeTab === 'environments' ? styles.tabActive : styles.tabInactive} onClick={() => setActiveTab('environments')}><Box size={18} /> Environments</button>
                 <button style={activeTab === 'credentials' ? styles.tabActive : styles.tabInactive} onClick={() => setActiveTab('credentials')}><Key size={18} /> Vault</button>
@@ -296,6 +384,7 @@ const AutomationConsole = () => {
 
             {/* CONTENT */}
             {activeTab === 'jobs' && renderJobsTab()}
+            {activeTab === 'runs' && renderRunsTab()}
             {activeTab === 'playbooks' && renderPlaybooksTab()}
             {activeTab === 'environments' && renderEnvironmentsTab()}
             {activeTab === 'credentials' && renderCredentialsTab()}
@@ -304,6 +393,21 @@ const AutomationConsole = () => {
             {/* MODALS */}
             {/* ========================================== */}
             
+            {/* RUN LOGS TERMINAL MODAL */}
+            {showRunModal && selectedRun && (
+                <div style={styles.modalOverlay}>
+                    <div style={{...styles.modalContentLarge, height: '70vh'}}>
+                        <div style={styles.modalHeader}>
+                            <h2 style={{margin: 0}}>Run #{selectedRun.id} Output</h2>
+                            <button onClick={() => setShowRunModal(false)} style={styles.closeBtn}><X size={20}/></button>
+                        </div>
+                        <div style={{...styles.modalBody, backgroundColor: '#111827', padding: '20px'}}>
+                            <pre style={styles.terminalText}>{selectedRun.stdout || "No output logged."}</pre>
+                        </div>
+                    </div>
+                </div>
+            )}
+
             {/* JOB MODAL */}
             {showJobModal && (
                 <div style={styles.modalOverlay}>
@@ -386,6 +490,7 @@ const AutomationConsole = () => {
                             </select>
                             <label style={styles.label}>Username</label>
                             <input style={styles.input} value={credForm.username} onChange={e => setCredForm({...credForm, username: e.target.value})} />
+                            
                             {/* THE SECURE SECRET TOGGLE */}
                             <div style={{display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px'}}>
                                 <label style={{...styles.label, marginBottom: 0}}>Secret {credForm.id && "(Leave blank to keep existing)"}</label>
@@ -437,7 +542,6 @@ const AutomationConsole = () => {
                         </div>
                         <div style={styles.modalFooter}>
                             <button style={styles.btnPrimary} onClick={() => {
-                                // Must parse strings to JSON for the backend
                                 try {
                                     const payload = { ...envForm, collections_json: JSON.parse(envForm.collections_json), python_packages_json: JSON.parse(envForm.python_packages_json) };
                                     handleSave('environments', payload, fetchEnvironments, setShowEnvModal, () => {});
@@ -465,12 +569,17 @@ const styles = {
     
     card: { backgroundColor: 'white', borderRadius: '12px', boxShadow: '0 2px 5px rgba(0,0,0,0.05)', overflow: 'hidden' },
     table: { width: '100%', borderCollapse: 'collapse' },
-    th: { backgroundColor: '#f9fafb', borderBottom: '1px solid #e5e7eb', textAlign: 'left' },
+    th: { backgroundColor: '#f9fafb', borderBottom: '1px solid #e5e7eb' },
+    
+    // 👇 THIS IS THE NEW PADDING FOR THE HEADINGS ACROSS ALL TABS
+    thItem: { padding: '16px 20px', fontWeight: '600', color: '#374151', textAlign: 'left' },
+    
     tr: { borderBottom: '1px solid #e5e7eb', transition: '0.2s' },
     td: { padding: '16px', color: '#374151', fontSize: '0.9rem' },
     
     btnPrimary: { backgroundColor: '#4f46e5', color: 'white', border: 'none', padding: '8px 16px', borderRadius: '6px', cursor: 'pointer', display: 'flex', gap: '5px', alignItems: 'center', fontWeight: '600' },
     btnGreen: { backgroundColor: '#10b981', color: 'white', border: 'none', padding: '6px 12px', borderRadius: '6px', cursor: 'pointer', display: 'flex', gap: '5px', alignItems: 'center', fontWeight: '600' },
+    btnSecondary: { backgroundColor: '#374151', color: 'white', border: 'none', padding: '6px 12px', borderRadius: '6px', cursor: 'pointer', fontSize: '0.85rem' },
     iconBtn: { background: 'none', border: 'none', cursor: 'pointer', padding: '4px' },
     
     badgeActive: { backgroundColor: '#d1fae5', color: '#065f46', padding: '4px 8px', borderRadius: '12px', fontSize: '0.75rem', fontWeight: 'bold' },
