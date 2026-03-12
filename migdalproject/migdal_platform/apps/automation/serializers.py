@@ -35,8 +35,10 @@ class AutomationJobSerializer(serializers.ModelSerializer):
         fields = ['id', 'name', 'playbook', 'environment', 'credential', 'targets', 'cron_schedule', 'is_active']
 
 class JobRunSerializer(serializers.ModelSerializer):
+    # Expose the string name of the job for the React table
     job_name = serializers.CharField(source='job.name', read_only=True)
 
     class Meta:
         model = JobRun
-        fields = ['id', 'job', 'job_name', 'status', 'stdout', 'created_at', 'finished_at']
+        # 👇 FIX: Changed 'created_at' to 'started_at' to match your model!
+        fields = ['id', 'job', 'job_name', 'status', 'stdout', 'started_at', 'finished_at']
