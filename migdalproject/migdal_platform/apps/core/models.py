@@ -13,7 +13,11 @@ class DataSource(models.Model):
     name = models.CharField(max_length=255)
     device_type = models.CharField(max_length=100) # e.g. 'network', 'storage', 'vm'
     
-    # This is the "Password" for the Device (API Key)
+    # --- NEW NETWORKING FIELDS FOR AUTOMATION ---
+    ip_address = models.GenericIPAddressField(blank=True, null=True, help_text="Required for Ansible SSH/WinRM execution")
+    hostname = models.CharField(max_length=255, blank=True, null=True, help_text="FQDN if IP is dynamic or API requires domain")
+    
+    # This is the "Password" for the Device (API Key) for incoming telemetry
     api_key = models.UUIDField(default=uuid.uuid4, unique=True, editable=False)
     
     created_at = models.DateTimeField(auto_now_add=True)
@@ -21,6 +25,26 @@ class DataSource(models.Model):
 
     def __str__(self):
         return f"{self.name} ({self.organization.name})"
+
+# class DataSource(models.Model):
+#     """
+#     Represents a Source of data (e.g., 'Core-Switch-01').
+#     It belongs to a Tenant (Organization).
+#     """
+#     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+#     organization = models.ForeignKey(Organization, on_delete=models.CASCADE, related_name='datasources')
+    
+#     name = models.CharField(max_length=255)
+#     device_type = models.CharField(max_length=100) # e.g. 'network', 'storage', 'vm'
+    
+#     # This is the "Password" for the Device (API Key)
+#     api_key = models.UUIDField(default=uuid.uuid4, unique=True, editable=False)
+    
+#     created_at = models.DateTimeField(auto_now_add=True)
+#     active = models.BooleanField(default=True)
+
+#     def __str__(self):
+#         return f"{self.name} ({self.organization.name})"
 
 class MetricDefinition(models.Model):
     """

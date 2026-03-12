@@ -9,6 +9,7 @@ urlpatterns = [
     path('api/core/', include('apps.core.urls')),
     path('api/ai/', include('apps.ai_engine.urls')),
     path('api/reports/', include('apps.reports.urls')),
+    path('api/automation/', include('apps.automation.urls')),
 ]
 
 if settings.DEBUG:

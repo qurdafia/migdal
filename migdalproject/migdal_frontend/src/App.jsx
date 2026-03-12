@@ -9,7 +9,9 @@ import Dashboard from './pages/Dashboard';
 // so we don't need to import them here directly unless you have standalone pages.
 
 // Import Components
-import ProtectedRoute from './components/ProtectedRoute'; // Fixed Path
+import ProtectedRoute from './components/ProtectedRoute';
+import AutomationJobsList from './pages/AutomationJobsList';
+import AutomationConsole from './pages/AutomationConsole';
 
 function App() {
   return (
@@ -50,6 +52,8 @@ function App() {
         {/* --- CATCH ALL --- */}
         {/* Any unknown route redirects to Login or Root */}
         <Route path="*" element={<Navigate to="/" replace />} />
+
+        <Route path="/automation" element={<AutomationConsole />} />
       </Routes>
     </BrowserRouter>
   );

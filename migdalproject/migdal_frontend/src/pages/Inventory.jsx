@@ -210,7 +210,7 @@ const Inventory = () => {
                                 </div>
                                 <div style={styles.field}>
                                     <label>IP:</label> 
-                                    <span style={{marginLeft: '5px', fontFamily:'monospace', color:'#666'}}>{device.ip_address || 'N/A'}</span>
+                                    <span style={{marginLeft: '5px', fontFamily:'monospace', color:'#666'}}>{device.ip_address || device.reported_ip || 'N/A'}</span>
                                 </div>
                             </div>
 

@@ -5,15 +5,13 @@ import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ReferenceLine, R
 import {
     Server, Activity, FileText, Download, Play, LogOut, Table, X,
     ShieldCheck, Bot, Network, Database, Box, ArrowLeft, Calendar,
-    AlertTriangle, CheckCircle, XCircle, Mail, Search, TowerControl,
-    Terminal // <-- 1. IMPORTED NEW ICON FOR AUTOMATION
+    AlertTriangle, CheckCircle, XCircle, Mail, Search, TowerControl
 } from 'lucide-react';
 
 import EmailConfig from './EmailConfig';
 import Inventory from './Inventory';
 import AISettings from './AISettings';
 import ReportingConsole from './ReportingConsole';
-import AutomationConsole from './AutomationConsole';
 
 const COLORS = ['#2563eb', '#16a34a', '#dc2626', '#9333ea', '#ea580c', '#0891b2'];
 
@@ -46,8 +44,7 @@ const Dashboard = () => {
     // LIFECYCLE / HOOKS
     // ==========================================
     useEffect(() => {
-        // 👇 3. ADDED 'automation' TO THE IGNORE LIST SO IT DOESN'T FETCH DEVICES
-        const nonDeviceCategories = ['inventory', 'ai-settings', 'email-settings', 'reporting', 'automation'];
+        const nonDeviceCategories = ['inventory', 'ai-settings', 'email-settings', 'reporting'];
         
         const delayDebounceFn = setTimeout(() => {
             if (category && !nonDeviceCategories.includes(category)) {
@@ -146,15 +143,18 @@ const Dashboard = () => {
     // HEALTH LOGIC ENGINE
     // ==========================================
     const calculateHealth = (device) => {
+        // 1. Check Offline
         if (device.status !== 'active') {
             return { label: 'Offline', color: '#9ca3af', icon: <XCircle size={12}/> };
         }
 
+        // 2. Check No Data
         const snap = device.latest_snapshot || {};
         if (Object.keys(snap).length === 0) {
             return { label: 'No Data', color: '#9ca3af', icon: <Activity size={12}/> };
         }
 
+        // 3. Analyze Metrics (Defaults: Critical > 90%, Warning > 75%)
         const cpu = snap.cpu_1min || snap.cluster_cpu_usage_pct || snap.cpu_usage || snap.cpu_load || 0;
         const mem = snap.memory_usage || snap.ram_usage || 0;
 
@@ -206,6 +206,7 @@ const Dashboard = () => {
             const res = await api.post(`/ai/analyze/${selectedDevice.id}/`); 
             const data = res.data;
             
+            // Normalize backend structure & handle caching logic
             setAnalysisResult({
                 summary: data.summary || data.content,
                 anomaly_detected: data.anomaly_detected !== undefined 
@@ -232,6 +233,7 @@ const Dashboard = () => {
             link.click();
             link.parentNode.removeChild(link);
             
+            // ✨ Auto-close the AI drawer after download
             setTimeout(() => {
                 setAnalysisResult(null);
             }, 1000);
@@ -257,15 +259,7 @@ const Dashboard = () => {
                         <span style={{textTransform:'capitalize'}}>{cat}s</span>
                     </div>
                 ))}
-                
                 <div style={styles.menuLabel}>MANAGEMENT</div>
-                
-                {/* 👇 4. ADDED THE AUTOMATION ENGINE TO THE SIDEBAR */}
-                <div style={{...styles.menuItem, backgroundColor: category === 'automation' ? '#374151' : 'transparent', color: category === 'automation' ? 'white' : '#d1d5db'}}
-                     onClick={() => navigate('/infrastructure/automation')}>
-                    <Terminal size={18}/> Automation Engine
-                </div>
-                
                 <div style={{...styles.menuItem, backgroundColor: category === 'inventory' ? '#374151' : 'transparent', color: category === 'inventory' ? 'white' : '#d1d5db'}}
                      onClick={() => navigate('/infrastructure/inventory')}>
                     <Table size={18}/> Inventory
@@ -364,7 +358,7 @@ const Dashboard = () => {
         <>
             <button onClick={() => {
                 navigate(`/infrastructure/${category}`);
-                setAnalysisResult(null); 
+                setAnalysisResult(null); // Reset drawer state when going back
             }} style={styles.backBtn}><ArrowLeft size={16}/> Back</button>
             <div style={styles.topBar}>
                 <h1>{selectedDevice?.name}</h1>
@@ -374,6 +368,7 @@ const Dashboard = () => {
             </div>
             <div style={styles.chartCard}>
                 
+                {/* --- NEW HEADER WITH DROPDOWN SELECTOR --- */}
                 <div style={{display:'flex', justifyContent:'space-between', marginBottom:'15px', alignItems: 'center'}}>
                     <div style={{display: 'flex', gap: '15px', alignItems: 'center'}}>
                         <h3 style={{margin: 0}}><Activity size={18}/> Live Telemetry</h3>
@@ -413,6 +408,7 @@ const Dashboard = () => {
                             />
                             <Legend />
 
+                            {/* --- NEW FILTERED METRICS MAPPING --- */}
                             {Array.isArray(metrics) && metrics
                                 .filter(m => selectedMetric === 'all' || m.json_path === selectedMetric)
                                 .map((m, i) => {
@@ -454,6 +450,7 @@ const Dashboard = () => {
                 </div>
             </div>
 
+            {/* --- AI ANALYSIS SECTION WITH CACHE BADGE & AUTO-CLOSE --- */}
             <div style={styles.aiCard}>
                 <div style={{display:'flex', justifyContent:'space-between', alignItems:'center'}}>
                     <div style={{display: 'flex', alignItems: 'center', gap: '10px'}}>
@@ -489,9 +486,6 @@ const Dashboard = () => {
     );
 
     const renderMainContent = () => {
-        // 👇 5. TOLD THE DASHBOARD TO RENDER YOUR NEW COMPONENT
-        // if (category === 'automation') return <AutomationJobsList />;
-        if (category === 'automation') return <AutomationConsole />;
         if (category === 'inventory') return <Inventory />;
         if (category === 'ai-settings') return <AISettings />;
         if (category === 'email-settings') return <EmailConfig />;
