@@ -7,6 +7,12 @@ const AutomationConsole = () => {
     const [activeTab, setActiveTab] = useState('jobs');
     
     // ==========================================
+    // PAGINATION STATE
+    // ==========================================
+    const [currentPage, setCurrentPage] = useState(1);
+    const itemsPerPage = 10;
+
+    // ==========================================
     // GLOBAL DATA FOR DROPDOWNS
     // ==========================================
     const [devices, setDevices] = useState([]);
@@ -75,7 +81,6 @@ const AutomationConsole = () => {
         try { 
             const res = await api.get('automation/job-runs/'); 
             const data = res.data.results || res.data || [];
-            // Sort to show newest first
             setRuns(data.sort((a, b) => b.id - a.id)); 
         } catch (e) { console.error(e); }
     };
@@ -122,7 +127,7 @@ const AutomationConsole = () => {
         try {
             const res = await api.post(`automation/jobs/${jobId}/execute/`);
             if (res.data.run_id) setActiveRunId(res.data.run_id);
-            fetchRuns(); // Refresh runs immediately to show pending job
+            fetchRuns(); 
         } catch (error) { setLiveLogs("Critical Error: Could not reach the Migdal backend."); }
     };
 
@@ -131,9 +136,7 @@ const AutomationConsole = () => {
         const pollLogs = async () => {
             if (!activeRunId) return;
             try {
-                // 👇 CHANGE THIS LINE from 'automation/runs/...' to 'automation/job-runs/...'
                 const res = await api.get(`automation/job-runs/${activeRunId}/`);
-                
                 setRunStatus(res.data.status);
                 if (res.data.stdout) setLiveLogs(res.data.stdout);
                 
@@ -152,12 +155,12 @@ const AutomationConsole = () => {
 
 
     // ==========================================
-    // MODAL OPENERS (For Editing)
+    // MODAL OPENERS
     // ==========================================
     const openEditPlaybook = (pb) => { setPlaybookForm(pb); setShowPlaybookModal(true); };
     const openEditCred = (c) => { 
         setCredForm({ ...c, secret: '' }); 
-        setShowSecret(false); // Force hidden on open
+        setShowSecret(false); 
         setShowCredModal(true); 
     };
     const openEditEnv = (e) => { 
@@ -167,208 +170,260 @@ const AutomationConsole = () => {
     const openEditJob = (j) => { setJobForm(j); setShowJobModal(true); };
 
     // ==========================================
-    // RENDERERS
+    // PAGINATION HELPER
     // ==========================================
-    const renderRunsTab = () => (
-        <div>
-            <div style={styles.headerRow}>
-                <h2 style={styles.sectionTitle}>Execution History</h2>
-                <button style={styles.btnPrimary} onClick={fetchRuns}>↻ Refresh</button>
-            </div>
-            <div style={styles.card}>
-                <table style={styles.table}>
-                    <thead style={styles.th}>
-                        <tr>
-                            <th style={styles.thItem}>Run ID</th>
-                            <th style={styles.thItem}>Job Name</th>
-                            <th style={styles.thItem}>Status</th>
-                            <th style={styles.thItem}>Finished At</th>
-                            <th style={{...styles.thItem, textAlign: 'right'}}>Logs</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        {runs.map(run => (
-                            <tr key={run.id} style={styles.tr}>
-                                <td style={styles.td}>#{run.id}</td>
-                                <td style={styles.td}><strong>{run.job_name || `Job ID: ${run.job}`}</strong></td>
-                                <td style={styles.td}>
-                                    <span style={run.status === 'successful' ? styles.badgeActive : run.status === 'failed' ? styles.badgeInactive : styles.badgeDark}>
-                                        {run.status ? run.status.toUpperCase() : 'UNKNOWN'}
-                                    </span>
-                                </td>
-                                <td style={styles.td}>{run.finished_at ? new Date(run.finished_at).toLocaleString() : 'Running...'}</td>
-                                <td style={{...styles.td, textAlign: 'right'}}>
-                                    <button onClick={() => { setSelectedRun(run); setShowRunModal(true); }} style={styles.btnSecondary}>
-                                        View Output
-                                    </button>
-                                </td>
-                            </tr>
-                        ))}
-                        {runs.length === 0 && <tr><td colSpan="5" style={{...styles.td, textAlign:'center'}}>No runs recorded yet.</td></tr>}
-                    </tbody>
-                </table>
-            </div>
-        </div>
-    );
+    const renderPagination = (totalItems) => {
+        const totalPages = Math.ceil(totalItems / itemsPerPage);
+        if (totalPages <= 1) return null; 
 
-    const renderJobsTab = () => (
-        <div>
-            <div style={styles.headerRow}>
-                <h2 style={styles.sectionTitle}>Scheduled Jobs</h2>
-                <button style={styles.btnPrimary} onClick={() => { setJobForm({ id: null, name: '', playbook: '', environment: '', credential: '', targets: [], cron_schedule: '', is_active: true }); setShowJobModal(true); }}>
-                    <Plus size={16} /> Create Job
-                </button>
-            </div>
-            <div style={styles.card}>
-                <table style={styles.table}>
-                    <thead style={styles.th}>
-                        <tr>
-                            <th style={styles.thItem}>Job Name</th>
-                            <th style={styles.thItem}>Schedule</th>
-                            <th style={styles.thItem}>Status</th>
-                            <th style={{...styles.thItem, textAlign: 'right'}}>Actions</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        {jobs.map(job => (
-                            <tr key={job.id} style={styles.tr}>
-                                <td style={styles.td}><strong>{job.name}</strong></td>
-                                <td style={styles.td}>{job.cron_schedule || 'Manual'}</td>
-                                <td style={styles.td}>
-                                    <span style={job.is_active ? styles.badgeActive : styles.badgeInactive}>{job.is_active ? 'Active' : 'Disabled'}</span>
-                                </td>
-                                <td style={{...styles.td, textAlign: 'right', display: 'flex', justifyContent: 'flex-end', gap: '10px'}}>
-                                    <button onClick={() => handleRunJob(job.id)} disabled={!job.is_active || runStatus === 'running'} style={styles.btnGreen}><Play size={14}/> Run</button>
-                                    <button onClick={() => openEditJob(job)} style={styles.iconBtn}><Edit2 size={16} color="#4b5563"/></button>
-                                    <button onClick={() => handleDelete('jobs', job.id, fetchJobs)} style={styles.iconBtn}><Trash2 size={16} color="#ef4444"/></button>
-                                </td>
-                            </tr>
-                        ))}
-                        {jobs.length === 0 && <tr><td colSpan="4" style={{...styles.td, textAlign:'center'}}>No jobs configured.</td></tr>}
-                    </tbody>
-                </table>
-            </div>
-
-            {activeRunId && (
-                <div style={styles.terminalContainer}>
-                    <div style={styles.terminalHeader}>
-                        <span style={{display:'flex', alignItems:'center', gap:'8px'}}><Terminal size={14}/> Live Output</span>
-                        <span style={{color: runStatus === 'successful' ? '#4ade80' : runStatus === 'failed' ? '#f87171' : '#facc15'}}>{runStatus.toUpperCase()}</span>
-                    </div>
-                    <div style={styles.terminalBody}>
-                        <pre style={styles.terminalText}>{liveLogs}</pre>
-                    </div>
+        return (
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px 20px', backgroundColor: '#f9fafb', borderTop: '1px solid #e5e7eb' }}>
+                <span style={{ fontSize: '0.85rem', color: '#6b7280' }}>
+                    Showing <strong>{((currentPage - 1) * itemsPerPage) + 1}</strong> to <strong>{Math.min(currentPage * itemsPerPage, totalItems)}</strong> of <strong>{totalItems}</strong> entries
+                </span>
+                <div style={{ display: 'flex', gap: '8px' }}>
+                    <button 
+                        disabled={currentPage === 1} 
+                        onClick={() => setCurrentPage(currentPage - 1)}
+                        style={currentPage === 1 ? styles.pageBtnDisabled : styles.pageBtn}
+                    >
+                        Previous
+                    </button>
+                    <button 
+                        disabled={currentPage === totalPages} 
+                        onClick={() => setCurrentPage(currentPage + 1)}
+                        style={currentPage === totalPages ? styles.pageBtnDisabled : styles.pageBtn}
+                    >
+                        Next
+                    </button>
                 </div>
-            )}
-        </div>
-    );
+            </div>
+        );
+    };
 
-    const renderPlaybooksTab = () => (
-        <div>
-            <div style={styles.headerRow}>
-                <h2 style={styles.sectionTitle}>Playbook Library</h2>
-                <button style={styles.btnPrimary} onClick={() => { setPlaybookForm({ id: null, name: '', description: '', yaml_content: '---\n' }); setShowPlaybookModal(true); }}>
-                    <Plus size={16} /> New Playbook
-                </button>
-            </div>
-            <div style={styles.card}>
-                <table style={styles.table}>
-                    <thead style={styles.th}>
-                        <tr>
-                            <th style={styles.thItem}>Name</th>
-                            <th style={styles.thItem}>Description</th>
-                            <th style={styles.thItem}>Updated</th>
-                            <th style={{...styles.thItem, textAlign: 'right'}}>Actions</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        {playbooks.map(pb => (
-                            <tr key={pb.id} style={styles.tr}>
-                                <td style={styles.td}><div style={{display:'flex', alignItems:'center', gap:'8px'}}><FileCode size={16} color="#3b82f6"/> <strong>{pb.name}</strong></div></td>
-                                <td style={styles.td}>{pb.description || '--'}</td>
-                                <td style={styles.td}>{new Date(pb.updated_at).toLocaleDateString()}</td>
-                                <td style={{...styles.td, textAlign: 'right'}}>
-                                    <button onClick={() => openEditPlaybook(pb)} style={styles.iconBtn}><Edit2 size={16} color="#4b5563"/></button>
-                                    <button onClick={() => handleDelete('playbooks', pb.id, fetchPlaybooks)} style={styles.iconBtn}><Trash2 size={16} color="#ef4444"/></button>
-                                </td>
+    // ==========================================
+    // RENDERERS (Now with Slicing!)
+    // ==========================================
+    const renderRunsTab = () => {
+        const currentRuns = runs.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage);
+        return (
+            <div>
+                <div style={styles.headerRow}>
+                    <h2 style={styles.sectionTitle}>Execution History</h2>
+                    <button style={styles.btnPrimary} onClick={fetchRuns}>↻ Refresh</button>
+                </div>
+                <div style={styles.card}>
+                    <table style={styles.table}>
+                        <thead style={styles.th}>
+                            <tr>
+                                <th style={styles.thItem}>Run ID</th>
+                                <th style={styles.thItem}>Job Name</th>
+                                <th style={styles.thItem}>Status</th>
+                                <th style={styles.thItem}>Finished At</th>
+                                <th style={{...styles.thItem, textAlign: 'right'}}>Logs</th>
                             </tr>
-                        ))}
-                        {playbooks.length === 0 && <tr><td colSpan="4" style={{...styles.td, textAlign:'center'}}>No playbooks found.</td></tr>}
-                    </tbody>
-                </table>
+                        </thead>
+                        <tbody>
+                            {currentRuns.map(run => (
+                                <tr key={run.id} style={styles.tr}>
+                                    <td style={styles.td}>#{run.id}</td>
+                                    <td style={styles.td}><strong>{run.job_name || `Job ID: ${run.job}`}</strong></td>
+                                    <td style={styles.td}>
+                                        <span style={run.status === 'successful' ? styles.badgeActive : run.status === 'failed' ? styles.badgeInactive : styles.badgeDark}>
+                                            {run.status ? run.status.toUpperCase() : 'UNKNOWN'}
+                                        </span>
+                                    </td>
+                                    <td style={styles.td}>{run.finished_at ? new Date(run.finished_at).toLocaleString() : 'Running...'}</td>
+                                    <td style={{...styles.td, textAlign: 'right'}}>
+                                        <button onClick={() => { setSelectedRun(run); setShowRunModal(true); }} style={styles.btnSecondary}>
+                                            View Output
+                                        </button>
+                                    </td>
+                                </tr>
+                            ))}
+                            {runs.length === 0 && <tr><td colSpan="5" style={{...styles.td, textAlign:'center'}}>No runs recorded yet.</td></tr>}
+                        </tbody>
+                    </table>
+                    {renderPagination(runs.length)}
+                </div>
             </div>
-        </div>
-    );
+        );
+    };
 
-    const renderCredentialsTab = () => (
-        <div>
-            <div style={styles.headerRow}>
-                <h2 style={styles.sectionTitle}>Secure Vault</h2>
-                <button style={styles.btnPrimary} onClick={() => { setCredForm({ id: null, name: '', credential_type: 'machine', username: '', secret: '' }); setShowCredModal(true); }}>
-                    <Plus size={16} /> Add Credential
-                </button>
-            </div>
-            <div style={styles.card}>
-                <table style={styles.table}>
-                    <thead style={styles.th}>
-                        <tr>
-                            <th style={styles.thItem}>Name</th>
-                            <th style={styles.thItem}>Type</th>
-                            <th style={styles.thItem}>Username</th>
-                            <th style={{...styles.thItem, textAlign: 'right'}}>Actions</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        {credentials.map(c => (
-                            <tr key={c.id} style={styles.tr}>
-                                <td style={styles.td}><div style={{display:'flex', alignItems:'center', gap:'8px'}}><Key size={16} color="#ca8a04"/> <strong>{c.name}</strong></div></td>
-                                <td style={styles.td}><span style={styles.badgeDark}>{c.credential_type}</span></td>
-                                <td style={styles.td}>{c.username || '--'}</td>
-                                <td style={{...styles.td, textAlign: 'right'}}>
-                                    <button onClick={() => openEditCred(c)} style={styles.iconBtn}><Edit2 size={16} color="#4b5563"/></button>
-                                    <button onClick={() => handleDelete('credentials', c.id, fetchCredentials)} style={styles.iconBtn}><Trash2 size={16} color="#ef4444"/></button>
-                                </td>
+    const renderJobsTab = () => {
+        const currentJobs = jobs.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage);
+        return (
+            <div>
+                <div style={styles.headerRow}>
+                    <h2 style={styles.sectionTitle}>Scheduled Jobs</h2>
+                    <button style={styles.btnPrimary} onClick={() => { setJobForm({ id: null, name: '', playbook: '', environment: '', credential: '', targets: [], cron_schedule: '', is_active: true }); setShowJobModal(true); }}>
+                        <Plus size={16} /> Create Job
+                    </button>
+                </div>
+                <div style={styles.card}>
+                    <table style={styles.table}>
+                        <thead style={styles.th}>
+                            <tr>
+                                <th style={styles.thItem}>Job Name</th>
+                                <th style={styles.thItem}>Schedule</th>
+                                <th style={styles.thItem}>Status</th>
+                                <th style={{...styles.thItem, textAlign: 'right'}}>Actions</th>
                             </tr>
-                        ))}
-                        {credentials.length === 0 && <tr><td colSpan="4" style={{...styles.td, textAlign:'center'}}>Vault is empty.</td></tr>}
-                    </tbody>
-                </table>
-            </div>
-        </div>
-    );
+                        </thead>
+                        <tbody>
+                            {currentJobs.map(job => (
+                                <tr key={job.id} style={styles.tr}>
+                                    <td style={styles.td}><strong>{job.name}</strong></td>
+                                    <td style={styles.td}>{job.cron_schedule || 'Manual'}</td>
+                                    <td style={styles.td}>
+                                        <span style={job.is_active ? styles.badgeActive : styles.badgeInactive}>{job.is_active ? 'Active' : 'Disabled'}</span>
+                                    </td>
+                                    <td style={{...styles.td, textAlign: 'right', display: 'flex', justifyContent: 'flex-end', gap: '10px'}}>
+                                        <button onClick={() => handleRunJob(job.id)} disabled={!job.is_active || runStatus === 'running'} style={styles.btnGreen}><Play size={14}/> Run</button>
+                                        <button onClick={() => openEditJob(job)} style={styles.iconBtn}><Edit2 size={16} color="#4b5563"/></button>
+                                        <button onClick={() => handleDelete('jobs', job.id, fetchJobs)} style={styles.iconBtn}><Trash2 size={16} color="#ef4444"/></button>
+                                    </td>
+                                </tr>
+                            ))}
+                            {jobs.length === 0 && <tr><td colSpan="4" style={{...styles.td, textAlign:'center'}}>No jobs configured.</td></tr>}
+                        </tbody>
+                    </table>
+                    {renderPagination(jobs.length)}
+                </div>
 
-    const renderEnvironmentsTab = () => (
-        <div>
-            <div style={styles.headerRow}>
-                <h2 style={styles.sectionTitle}>Execution Environments</h2>
-                <button style={styles.btnPrimary} onClick={() => { setEnvForm({ id: null, name: '', collections_json: '[]', python_packages_json: '[]' }); setShowEnvModal(true); }}>
-                    <Plus size={16} /> New Environment
-                </button>
+                {activeRunId && (
+                    <div style={styles.terminalContainer}>
+                        <div style={styles.terminalHeader}>
+                            <span style={{display:'flex', alignItems:'center', gap:'8px'}}><Terminal size={14}/> Live Output</span>
+                            <span style={{color: runStatus === 'successful' ? '#4ade80' : runStatus === 'failed' ? '#f87171' : '#facc15'}}>{runStatus.toUpperCase()}</span>
+                        </div>
+                        <div style={styles.terminalBody}>
+                            <pre style={styles.terminalText}>{liveLogs}</pre>
+                        </div>
+                    </div>
+                )}
             </div>
-            <div style={styles.card}>
-                <table style={styles.table}>
-                    <thead style={styles.th}>
-                        <tr>
-                            <th style={styles.thItem}>Environment Name</th>
-                            <th style={{...styles.thItem, textAlign: 'right'}}>Actions</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        {environments.map(e => (
-                            <tr key={e.id} style={styles.tr}>
-                                <td style={styles.td}><div style={{display:'flex', alignItems:'center', gap:'8px'}}><Box size={16} color="#9333ea"/> <strong>{e.name}</strong></div></td>
-                                <td style={{...styles.td, textAlign: 'right'}}>
-                                    <button onClick={() => openEditEnv(e)} style={styles.iconBtn}><Edit2 size={16} color="#4b5563"/></button>
-                                    <button onClick={() => handleDelete('environments', e.id, fetchEnvironments)} style={styles.iconBtn}><Trash2 size={16} color="#ef4444"/></button>
-                                </td>
+        );
+    };
+
+    const renderPlaybooksTab = () => {
+        const currentPlaybooks = playbooks.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage);
+        return (
+            <div>
+                <div style={styles.headerRow}>
+                    <h2 style={styles.sectionTitle}>Playbook Library</h2>
+                    <button style={styles.btnPrimary} onClick={() => { setPlaybookForm({ id: null, name: '', description: '', yaml_content: '---\n' }); setShowPlaybookModal(true); }}>
+                        <Plus size={16} /> New Playbook
+                    </button>
+                </div>
+                <div style={styles.card}>
+                    <table style={styles.table}>
+                        <thead style={styles.th}>
+                            <tr>
+                                <th style={styles.thItem}>Name</th>
+                                <th style={styles.thItem}>Description</th>
+                                <th style={styles.thItem}>Updated</th>
+                                <th style={{...styles.thItem, textAlign: 'right'}}>Actions</th>
                             </tr>
-                        ))}
-                        {environments.length === 0 && <tr><td colSpan="2" style={{...styles.td, textAlign:'center'}}>No environments defined.</td></tr>}
-                    </tbody>
-                </table>
+                        </thead>
+                        <tbody>
+                            {currentPlaybooks.map(pb => (
+                                <tr key={pb.id} style={styles.tr}>
+                                    <td style={styles.td}><div style={{display:'flex', alignItems:'center', gap:'8px'}}><FileCode size={16} color="#3b82f6"/> <strong>{pb.name}</strong></div></td>
+                                    <td style={styles.td}>{pb.description || '--'}</td>
+                                    <td style={styles.td}>{new Date(pb.updated_at).toLocaleDateString()}</td>
+                                    <td style={{...styles.td, textAlign: 'right'}}>
+                                        <button onClick={() => openEditPlaybook(pb)} style={styles.iconBtn}><Edit2 size={16} color="#4b5563"/></button>
+                                        <button onClick={() => handleDelete('playbooks', pb.id, fetchPlaybooks)} style={styles.iconBtn}><Trash2 size={16} color="#ef4444"/></button>
+                                    </td>
+                                </tr>
+                            ))}
+                            {playbooks.length === 0 && <tr><td colSpan="4" style={{...styles.td, textAlign:'center'}}>No playbooks found.</td></tr>}
+                        </tbody>
+                    </table>
+                    {renderPagination(playbooks.length)}
+                </div>
             </div>
-        </div>
-    );
+        );
+    };
+
+    const renderCredentialsTab = () => {
+        const currentCredentials = credentials.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage);
+        return (
+            <div>
+                <div style={styles.headerRow}>
+                    <h2 style={styles.sectionTitle}>Secure Vault</h2>
+                    <button style={styles.btnPrimary} onClick={() => { setCredForm({ id: null, name: '', credential_type: 'machine', username: '', secret: '' }); setShowCredModal(true); }}>
+                        <Plus size={16} /> Add Credential
+                    </button>
+                </div>
+                <div style={styles.card}>
+                    <table style={styles.table}>
+                        <thead style={styles.th}>
+                            <tr>
+                                <th style={styles.thItem}>Name</th>
+                                <th style={styles.thItem}>Type</th>
+                                <th style={styles.thItem}>Username</th>
+                                <th style={{...styles.thItem, textAlign: 'right'}}>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {currentCredentials.map(c => (
+                                <tr key={c.id} style={styles.tr}>
+                                    <td style={styles.td}><div style={{display:'flex', alignItems:'center', gap:'8px'}}><Key size={16} color="#ca8a04"/> <strong>{c.name}</strong></div></td>
+                                    <td style={styles.td}><span style={styles.badgeDark}>{c.credential_type}</span></td>
+                                    <td style={styles.td}>{c.username || '--'}</td>
+                                    <td style={{...styles.td, textAlign: 'right'}}>
+                                        <button onClick={() => openEditCred(c)} style={styles.iconBtn}><Edit2 size={16} color="#4b5563"/></button>
+                                        <button onClick={() => handleDelete('credentials', c.id, fetchCredentials)} style={styles.iconBtn}><Trash2 size={16} color="#ef4444"/></button>
+                                    </td>
+                                </tr>
+                            ))}
+                            {credentials.length === 0 && <tr><td colSpan="4" style={{...styles.td, textAlign:'center'}}>Vault is empty.</td></tr>}
+                        </tbody>
+                    </table>
+                    {renderPagination(credentials.length)}
+                </div>
+            </div>
+        );
+    };
+
+    const renderEnvironmentsTab = () => {
+        const currentEnvironments = environments.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage);
+        return (
+            <div>
+                <div style={styles.headerRow}>
+                    <h2 style={styles.sectionTitle}>Execution Environments</h2>
+                    <button style={styles.btnPrimary} onClick={() => { setEnvForm({ id: null, name: '', collections_json: '[]', python_packages_json: '[]' }); setShowEnvModal(true); }}>
+                        <Plus size={16} /> New Environment
+                    </button>
+                </div>
+                <div style={styles.card}>
+                    <table style={styles.table}>
+                        <thead style={styles.th}>
+                            <tr>
+                                <th style={styles.thItem}>Environment Name</th>
+                                <th style={{...styles.thItem, textAlign: 'right'}}>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {currentEnvironments.map(e => (
+                                <tr key={e.id} style={styles.tr}>
+                                    <td style={styles.td}><div style={{display:'flex', alignItems:'center', gap:'8px'}}><Box size={16} color="#9333ea"/> <strong>{e.name}</strong></div></td>
+                                    <td style={{...styles.td, textAlign: 'right'}}>
+                                        <button onClick={() => openEditEnv(e)} style={styles.iconBtn}><Edit2 size={16} color="#4b5563"/></button>
+                                        <button onClick={() => handleDelete('environments', e.id, fetchEnvironments)} style={styles.iconBtn}><Trash2 size={16} color="#ef4444"/></button>
+                                    </td>
+                                </tr>
+                            ))}
+                            {environments.length === 0 && <tr><td colSpan="2" style={{...styles.td, textAlign:'center'}}>No environments defined.</td></tr>}
+                        </tbody>
+                    </table>
+                    {renderPagination(environments.length)}
+                </div>
+            </div>
+        );
+    };
 
     // ==========================================
     // MAIN RENDER
@@ -377,11 +432,11 @@ const AutomationConsole = () => {
         <div style={styles.container}>
             {/* TABS */}
             <div style={styles.tabContainer}>
-                <button style={activeTab === 'jobs' ? styles.tabActive : styles.tabInactive} onClick={() => setActiveTab('jobs')}><Terminal size={18} /> Jobs</button>
-                <button style={activeTab === 'runs' ? styles.tabActive : styles.tabInactive} onClick={() => setActiveTab('runs')}><Activity size={18} /> Runs History</button>
-                <button style={activeTab === 'playbooks' ? styles.tabActive : styles.tabInactive} onClick={() => setActiveTab('playbooks')}><FileCode size={18} /> Playbooks</button>
-                <button style={activeTab === 'environments' ? styles.tabActive : styles.tabInactive} onClick={() => setActiveTab('environments')}><Box size={18} /> Environments</button>
-                <button style={activeTab === 'credentials' ? styles.tabActive : styles.tabInactive} onClick={() => setActiveTab('credentials')}><Key size={18} /> Vault</button>
+                <button style={activeTab === 'jobs' ? styles.tabActive : styles.tabInactive} onClick={() => { setActiveTab('jobs'); setCurrentPage(1); }}><Terminal size={18} /> Jobs</button>
+                <button style={activeTab === 'runs' ? styles.tabActive : styles.tabInactive} onClick={() => { setActiveTab('runs'); setCurrentPage(1); }}><Activity size={18} /> Runs History</button>
+                <button style={activeTab === 'playbooks' ? styles.tabActive : styles.tabInactive} onClick={() => { setActiveTab('playbooks'); setCurrentPage(1); }}><FileCode size={18} /> Playbooks</button>
+                <button style={activeTab === 'environments' ? styles.tabActive : styles.tabInactive} onClick={() => { setActiveTab('environments'); setCurrentPage(1); }}><Box size={18} /> Environments</button>
+                <button style={activeTab === 'credentials' ? styles.tabActive : styles.tabInactive} onClick={() => { setActiveTab('credentials'); setCurrentPage(1); }}><Key size={18} /> Vault</button>
             </div>
 
             {/* CONTENT */}
@@ -572,10 +627,7 @@ const styles = {
     card: { backgroundColor: 'white', borderRadius: '12px', boxShadow: '0 2px 5px rgba(0,0,0,0.05)', overflow: 'hidden' },
     table: { width: '100%', borderCollapse: 'collapse' },
     th: { backgroundColor: '#f9fafb', borderBottom: '1px solid #e5e7eb' },
-    
-    // 👇 THIS IS THE NEW PADDING FOR THE HEADINGS ACROSS ALL TABS
     thItem: { padding: '16px 20px', fontWeight: '600', color: '#374151', textAlign: 'left' },
-    
     tr: { borderBottom: '1px solid #e5e7eb', transition: '0.2s' },
     td: { padding: '16px', color: '#374151', fontSize: '0.9rem' },
     
@@ -584,6 +636,10 @@ const styles = {
     btnSecondary: { backgroundColor: '#374151', color: 'white', border: 'none', padding: '6px 12px', borderRadius: '6px', cursor: 'pointer', fontSize: '0.85rem' },
     iconBtn: { background: 'none', border: 'none', cursor: 'pointer', padding: '4px' },
     
+    // Pagination Buttons
+    pageBtn: { backgroundColor: 'white', border: '1px solid #d1d5db', color: '#374151', padding: '6px 12px', borderRadius: '6px', cursor: 'pointer', fontSize: '0.85rem', fontWeight: '500', transition: '0.2s' },
+    pageBtnDisabled: { backgroundColor: '#f3f4f6', border: '1px solid #e5e7eb', color: '#9ca3af', padding: '6px 12px', borderRadius: '6px', cursor: 'not-allowed', fontSize: '0.85rem', fontWeight: '500' },
+
     badgeActive: { backgroundColor: '#d1fae5', color: '#065f46', padding: '4px 8px', borderRadius: '12px', fontSize: '0.75rem', fontWeight: 'bold' },
     badgeInactive: { backgroundColor: '#fee2e2', color: '#991b1b', padding: '4px 8px', borderRadius: '12px', fontSize: '0.75rem', fontWeight: 'bold' },
     badgeDark: { backgroundColor: '#374151', color: 'white', padding: '4px 8px', borderRadius: '6px', fontSize: '0.75rem', fontWeight: 'bold', textTransform: 'uppercase' },
