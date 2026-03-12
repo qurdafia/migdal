@@ -3,17 +3,79 @@ import tempfile
 import shutil
 import json
 import threading
-import time
+import subprocess
 from django.utils import timezone
 from apps.automation.models import JobRun
 
-# 🛡️ OS-AWARE IMPORT: Catch the Windows 'fcntl' error gracefully
+# 🛡️ OS-AWARE IMPORT
 try:
     import ansible_runner
     ANSIBLE_AVAILABLE = True
 except ImportError:
     ANSIBLE_AVAILABLE = False
     print("⚠️ WARNING: ansible_runner not found or running on Windows. Migdal will MOCK execution locally.")
+
+def setup_dynamic_environment(environment, temp_dir):
+    """
+    Reads the Environment JSON payloads and dynamically installs
+    Ansible Collections and Python Packages via subprocess.
+    """
+    if not environment:
+        return ""
+        
+    setup_logs = "--- Environment Provisioning ---\n"
+    
+    # 1. Install Python Packages via pip
+    if environment.python_packages_json and isinstance(environment.python_packages_json, list):
+        packages = environment.python_packages_json
+        if packages:
+            setup_logs += f"Installing Python packages: {', '.join(packages)}...\n"
+            try:
+                # Runs 'pip install pkg1 pkg2' silently
+                result = subprocess.run(['pip', 'install', '--quiet'] + packages, capture_output=True, text=True)
+                if result.returncode == 0:
+                    setup_logs += "✅ Python packages installed successfully.\n"
+                else:
+                    setup_logs += f"❌ Python package error: {result.stderr}\n"
+            except Exception as e:
+                setup_logs += f"❌ Failed to run pip: {str(e)}\n"
+
+    # 2. Install Ansible Collections via ansible-galaxy
+    if environment.collections_json and isinstance(environment.collections_json, list):
+        collections = environment.collections_json
+        if collections:
+            req_path = os.path.join(temp_dir, 'requirements.yml')
+            
+            # Dynamically generate the requirements.yml file
+            with open(req_path, 'w') as f:
+                f.write("---\ncollections:\n")
+                for col in collections:
+                    name = col.get('name')
+                    version = col.get('version', '')
+                    if name:
+                        if version and version.lower() != 'latest':
+                            f.write(f"  - name: {name}\n    version: {version}\n")
+                        else:
+                            f.write(f"  - name: {name}\n")
+            
+            setup_logs += f"Installing Ansible collections...\n"
+            try:
+                # Install collections directly into the runner's temporary project path
+                collections_path = os.path.join(temp_dir, 'collections')
+                result = subprocess.run(
+                    ['ansible-galaxy', 'collection', 'install', '-r', req_path, '-p', collections_path],
+                    capture_output=True, text=True
+                )
+                if result.returncode == 0:
+                    setup_logs += "✅ Ansible collections installed successfully.\n"
+                else:
+                    setup_logs += f"❌ Ansible galaxy error: {result.stderr}\n"
+            except Exception as e:
+                setup_logs += f"❌ Failed to run ansible-galaxy: {str(e)}\n"
+
+    setup_logs += "--- Environment Ready ---\n\n"
+    return setup_logs
+
 
 def execute_job_run(job_run_id):
     """
@@ -29,40 +91,16 @@ def execute_job_run(job_run_id):
     credential = job.credential
     targets = job.targets.all()
 
-    # 1. Update status to running
     run.status = 'running'
     run.save()
 
-    # ==========================================
-    # 🛑 THE WINDOWS DEV BYPASS 🛑
-    # If running locally on Windows, mock the execution and exit early
-    # ==========================================
     if not ANSIBLE_AVAILABLE:
-        print(f"🛠️ [MOCK] Pretending to execute Job: {job.name} on targets: {[t.name for t in targets]}")
-        time.sleep(3) # Simulate network delay
-        
         run.status = 'successful'
-        run.stdout = (
-            "====================================================\n"
-            "MIGDAL DEVELOPMENT MODE (WINDOWS DETECTED)\n"
-            "====================================================\n"
-            "Ansible is not supported natively on Windows.\n"
-            "This is a simulated successful execution log to test the React UI.\n\n"
-            "PLAY [Simulated Target Execution] *******************\n"
-            "TASK [Gathering Facts] ******************************\n"
-            "ok: [Mock-Target-01]\n"
-            "TASK [Simulated Command] ****************************\n"
-            "changed: [Mock-Target-01]\n\n"
-            "PLAY RECAP ******************************************\n"
-            "Mock-Target-01  : ok=2  changed=1  unreachable=0  failed=0\n"
-        )
+        run.stdout = "MIGDAL DEV MODE: Simulated Execution Success."
         run.finished_at = timezone.now()
         run.save()
         return True
 
-    # ==========================================
-    # 🚀 REAL RHEL/LINUX EXECUTION BELOW 🚀
-    # ==========================================
     temp_dir = tempfile.mkdtemp(prefix=f"migdal_job_{job_run_id}_")
     
     try:
@@ -74,10 +112,17 @@ def execute_job_run(job_run_id):
         os.makedirs(inventory_dir)
         os.makedirs(project_dir)
 
+        # 🚀 THE NEW ENVIRONMENT BUILDER
+        setup_logs = ""
+        if job.environment:
+            setup_logs = setup_dynamic_environment(job.environment, temp_dir)
+
+        # Write the Playbook
         playbook_path = os.path.join(project_dir, 'main.yml')
         with open(playbook_path, 'w') as f:
             f.write(job.playbook.yaml_content)
 
+        # Build Dynamic Inventory
         inventory_data = {
             "all": {
                 "hosts": {},
@@ -110,6 +155,7 @@ def execute_job_run(job_run_id):
         with open(inventory_path, 'w') as f:
             json.dump(inventory_data, f, indent=4)
 
+        # Fire Ansible Runner
         r = ansible_runner.run(
             private_data_dir=temp_dir,
             playbook='main.yml',
@@ -118,15 +164,19 @@ def execute_job_run(job_run_id):
 
         run.status = 'successful' if r.rc == 0 else 'failed'
         
+        # Combine the setup logs with the actual playbook execution logs
+        final_output = setup_logs
         if r.stdout and os.path.exists(r.stdout.name):
             with open(r.stdout.name, 'r') as log_file:
-                run.stdout = log_file.read()
+                final_output += log_file.read()
         else:
-            run.stdout = "Execution completed, but no standard output was captured."
+            final_output += "Execution completed, no standard output captured."
+            
+        run.stdout = final_output
 
     except Exception as e:
         run.status = 'failed'
-        run.stdout = f"SYSTEM ERROR: Migdal encountered a fatal error before execution.\n{str(e)}"
+        run.stdout = f"SYSTEM ERROR: Migdal encountered a fatal error.\n{str(e)}"
         
     finally:
         run.finished_at = timezone.now()
@@ -136,8 +186,5 @@ def execute_job_run(job_run_id):
     return run.status == 'successful'
 
 def trigger_job_async(job_run_id):
-    """
-    A lightweight wrapper to run the job in the background so the API doesn't freeze.
-    """
     thread = threading.Thread(target=execute_job_run, args=(job_run_id,))
     thread.start()
