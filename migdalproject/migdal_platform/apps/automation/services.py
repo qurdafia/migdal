@@ -154,13 +154,25 @@ def execute_job_run(job_run_id):
         inventory_path = os.path.join(inventory_dir, 'hosts.json')
         with open(inventory_path, 'w') as f:
             json.dump(inventory_data, f, indent=4)
+        
+        # 🔗 THE MISSING LINK: Tell Ansible exactly where we installed the collections
+        custom_env = os.environ.copy()
+        custom_env['ANSIBLE_COLLECTIONS_PATH'] = os.path.join(temp_dir, 'collections')
 
         # Fire Ansible Runner
         r = ansible_runner.run(
             private_data_dir=temp_dir,
             playbook='main.yml',
-            quiet=True 
+            quiet=True,
+            envvars=custom_env  # <-- Pass the environment variables here!
         )
+
+        # # Fire Ansible Runner
+        # r = ansible_runner.run(
+        #     private_data_dir=temp_dir,
+        #     playbook='main.yml',
+        #     quiet=True 
+        # )
 
         run.status = 'successful' if r.rc == 0 else 'failed'
         
