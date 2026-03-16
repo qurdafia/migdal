@@ -60,10 +60,15 @@ const AutomationConsole = () => {
     const [isRefreshing, setIsRefreshing] = useState(false);
     
     // ==========================================
-    // PAGINATION STATE
+    // PAGINATION STATE (SERVER-SIDE)
     // ==========================================
     const [currentPage, setCurrentPage] = useState(1);
     const itemsPerPage = 10;
+    
+    // This tracks the REAL total count straight from Django's database
+    const [totalCounts, setTotalCounts] = useState({
+        jobs: 0, runs: 0, playbooks: 0, credentials: 0, environments: 0
+    });
 
     // ==========================================
     // GLOBAL DATA FOR DROPDOWNS
@@ -72,7 +77,7 @@ const AutomationConsole = () => {
     const [organizations, setOrganizations] = useState([]);
 
     // ==========================================
-    // STATE: JOBS & EXECUTION
+    // STATE DECLARATIONS
     // ==========================================
     const [jobs, setJobs] = useState([]);
     const [activeRunId, setActiveRunId] = useState(null);
@@ -81,9 +86,6 @@ const AutomationConsole = () => {
     const [showJobModal, setShowJobModal] = useState(false);
     const [jobForm, setJobForm] = useState({ id: null, name: '', playbook: '', environment: '', credential: '', targets: [], cron_schedule: '* * * * *', start_time: '', end_time: '', is_active: true });
 
-    // ==========================================
-    // STATE: RUNS, PLAYBOOKS, CREDENTIALS, ENVIRONMENTS, GROUPS
-    // ==========================================
     const [runs, setRuns] = useState([]);
     const [selectedRun, setSelectedRun] = useState(null);
     const [showRunModal, setShowRunModal] = useState(false);
@@ -101,39 +103,72 @@ const AutomationConsole = () => {
     const [showEnvModal, setShowEnvModal] = useState(false);
     const [envForm, setEnvForm] = useState({ id: null, name: '', collections_json: '[\n  {"name": "community.general", "version": "latest"}\n]', python_packages_json: '[]' });
 
-    const [groups, setGroups] = useState([]); // Shell for Phase 2
+    // ==========================================
+    // API FETCHERS (NOW USING ?page=X)
+    // ==========================================
+    const fetchDevices = async () => { try { const res = await api.get('/core/devices/?page_size=1000'); setDevices(res.data.results || res.data || []); } catch (e) { console.error(e); } };
+    const fetchOrganizations = async () => { try { const res = await api.get('/accounts/organizations/?page_size=1000'); setOrganizations(res.data.results || res.data || []); } catch (e) { console.error(e); } };
+    
+    const fetchJobs = async (page = 1) => { 
+        try { 
+            const res = await api.get(`automation/jobs/?page=${page}`); 
+            setJobs(res.data.results || res.data || []); 
+            setTotalCounts(prev => ({ ...prev, jobs: res.data.count || (Array.isArray(res.data) ? res.data.length : 0) }));
+        } catch (e) { console.error(e); } 
+    };
+    
+    const fetchRuns = async (page = 1) => { 
+        setIsRefreshing(true);
+        try { 
+            const res = await api.get(`automation/job-runs/?page=${page}`); 
+            setRuns(res.data.results || res.data || []); 
+            setTotalCounts(prev => ({ ...prev, runs: res.data.count || (Array.isArray(res.data) ? res.data.length : 0) }));
+        } catch (e) { console.error(e); } finally { setIsRefreshing(false); }
+    };
+    
+    const fetchPlaybooks = async (page = 1) => { 
+        try { 
+            const res = await api.get(`automation/playbooks/?page=${page}`); 
+            setPlaybooks(res.data.results || res.data || []); 
+            setTotalCounts(prev => ({ ...prev, playbooks: res.data.count || (Array.isArray(res.data) ? res.data.length : 0) }));
+        } catch (e) { console.error(e); } 
+    };
+    
+    const fetchCredentials = async (page = 1) => { 
+        try { 
+            const res = await api.get(`automation/credentials/?page=${page}`); 
+            setCredentials(res.data.results || res.data || []); 
+            setTotalCounts(prev => ({ ...prev, credentials: res.data.count || (Array.isArray(res.data) ? res.data.length : 0) }));
+        } catch (e) { console.error(e); } 
+    };
+    
+    const fetchEnvironments = async (page = 1) => { 
+        try { 
+            const res = await api.get(`automation/environments/?page=${page}`); 
+            setEnvironments(res.data.results || res.data || []); 
+            setTotalCounts(prev => ({ ...prev, environments: res.data.count || (Array.isArray(res.data) ? res.data.length : 0) }));
+        } catch (e) { console.error(e); } 
+    };
 
     // ==========================================
-    // LIFECYCLE ROUTER
+    // LIFECYCLE ROUTERS
     // ==========================================
+    
+    // 1. Initial Load of Dropdown Data
     useEffect(() => {
         fetchDevices();
         fetchOrganizations();
-        fetchPlaybooks();
-        fetchCredentials();
-        fetchEnvironments();
-        fetchJobs();
-        fetchRuns();
     }, []);
 
-    // ==========================================
-    // API FETCHERS
-    // ==========================================
-    const fetchDevices = async () => { try { const res = await api.get('/core/devices/'); setDevices(res.data.results || res.data || []); } catch (e) { console.error(e); } };
-    const fetchOrganizations = async () => { try { const res = await api.get('/accounts/organizations/'); setOrganizations(res.data.results || res.data || []); } catch (e) { console.error(e); } };
-    
-    const fetchJobs = async () => { try { const res = await api.get('automation/jobs/'); setJobs(res.data.results || res.data || []); } catch (e) { console.error(e); } };
-    const fetchRuns = async () => { 
-        setIsRefreshing(true);
-        try { 
-            const res = await api.get('automation/job-runs/'); 
-            const data = res.data.results || res.data || [];
-            setRuns(data.sort((a, b) => b.id - a.id)); 
-        } catch (e) { console.error(e); } finally { setIsRefreshing(false); }
-    };
-    const fetchPlaybooks = async () => { try { const res = await api.get('automation/playbooks/'); setPlaybooks(res.data.results || res.data || []); } catch (e) { console.error(e); } };
-    const fetchCredentials = async () => { try { const res = await api.get('automation/credentials/'); setCredentials(res.data.results || res.data || []); } catch (e) { console.error(e); } };
-    const fetchEnvironments = async () => { try { const res = await api.get('automation/environments/'); setEnvironments(res.data.results || res.data || []); } catch (e) { console.error(e); } };
+    // 2. Tab & Page Switcher Tracker (Automatically calls API when page changes)
+    useEffect(() => {
+        if (activeTab === 'jobs') fetchJobs(currentPage);
+        if (activeTab === 'runs') fetchRuns(currentPage);
+        if (activeTab === 'playbooks') fetchPlaybooks(currentPage);
+        if (activeTab === 'credentials') fetchCredentials(currentPage);
+        if (activeTab === 'environments') fetchEnvironments(currentPage);
+    }, [activeTab, currentPage]);
+
 
     // ==========================================
     // CRUD HANDLERS
@@ -143,14 +178,14 @@ const AutomationConsole = () => {
             if (formState.id) { await api.put(`automation/${endpoint}/${formState.id}/`, formState); } 
             else { await api.post(`automation/${endpoint}/`, formState); }
             setModalFunc(false);
-            fetchFunc();
+            fetchFunc(currentPage);
             resetState();
         } catch (e) { alert(`Failed to save. Error: ${e.response?.data ? JSON.stringify(e.response.data) : e.message}`); }
     };
 
     const handleDelete = async (endpoint, id, fetchFunc) => {
         if (!window.confirm("Are you sure you want to delete this? This action cannot be undone.")) return;
-        try { await api.delete(`automation/${endpoint}/${id}/`); fetchFunc(); } 
+        try { await api.delete(`automation/${endpoint}/${id}/`); fetchFunc(currentPage); } 
         catch (e) { alert("Failed to delete. It might be in use by a Job."); }
     };
 
@@ -163,7 +198,7 @@ const AutomationConsole = () => {
         try {
             const res = await api.post(`automation/jobs/${jobId}/execute/`);
             if (res.data.run_id) setActiveRunId(res.data.run_id);
-            fetchRuns(); 
+            fetchRuns(currentPage); 
         } catch (error) { setLiveLogs("Critical Error: Could not reach the Migdal backend."); }
     };
 
@@ -178,7 +213,8 @@ const AutomationConsole = () => {
                 
                 if (['successful', 'failed', 'canceled'].includes(res.data.status)) {
                     clearInterval(pollInterval);
-                    fetchRuns(); 
+                    fetchRuns(1); // Reset to page 1 to see the new finished run at the top
+                    setCurrentPage(1);
                 }
             } catch (e) { console.error(e); }
         };
@@ -199,10 +235,10 @@ const AutomationConsole = () => {
     const openEditJob = (j) => { setJobForm(j); setShowJobModal(true); };
 
     // ==========================================
-    // PAGINATION HELPER (FIXED: ALWAYS VISIBLE)
+    // PAGINATION HELPER (FIXED FOR SERVER-SIDE)
     // ==========================================
     const renderPagination = (totalItems) => {
-        const totalPages = Math.max(1, Math.ceil(totalItems / itemsPerPage)); // Ensure at least 1 page
+        const totalPages = Math.max(1, Math.ceil(totalItems / itemsPerPage)); 
 
         return (
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px 20px', backgroundColor: '#f9fafb', borderTop: '1px solid #e5e7eb' }}>
@@ -231,16 +267,14 @@ const AutomationConsole = () => {
     };
 
     // ==========================================
-    // RENDERERS
+    // RENDERERS (REMOVED LOCAL .slice())
     // ==========================================
     const renderRunsTab = () => {
-        const currentRuns = runs.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage);
         return (
             <div>
                 <div style={styles.headerRow}>
                     <h2 style={styles.sectionTitle}>Execution History</h2>
-                    {/* FIXED REFRESH BUTTON */}
-                    <button style={styles.btnPrimary} onClick={() => { setCurrentPage(1); fetchRuns(); }}>
+                    <button style={styles.btnPrimary} onClick={() => fetchRuns(currentPage)}>
                         <RefreshCw size={16} className={isRefreshing ? "animate-spin" : ""} /> 
                         {isRefreshing ? "Refreshing..." : "Refresh Logs"}
                     </button>
@@ -257,7 +291,7 @@ const AutomationConsole = () => {
                             </tr>
                         </thead>
                         <tbody>
-                            {currentRuns.map(run => (
+                            {runs.map(run => (
                                 <tr key={run.id} style={styles.tr}>
                                     <td style={styles.td}>#{run.id}</td>
                                     <td style={styles.td}><strong>{run.job_name || `Job ID: ${run.job}`}</strong></td>
@@ -275,14 +309,13 @@ const AutomationConsole = () => {
                             {runs.length === 0 && <tr><td colSpan="5" style={{...styles.td, textAlign:'center'}}>No runs recorded yet.</td></tr>}
                         </tbody>
                     </table>
-                    {renderPagination(runs.length)}
+                    {renderPagination(totalCounts.runs)}
                 </div>
             </div>
         );
     };
 
     const renderJobsTab = () => {
-        const currentJobs = jobs.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage);
         return (
             <div>
                 <div style={styles.headerRow}>
@@ -302,7 +335,7 @@ const AutomationConsole = () => {
                             </tr>
                         </thead>
                         <tbody>
-                            {currentJobs.map(job => (
+                            {jobs.map(job => (
                                 <tr key={job.id} style={styles.tr}>
                                     <td style={styles.td}><strong>{job.name}</strong></td>
                                     <td style={styles.td}>{job.cron_schedule || 'Manual'}</td>
@@ -319,7 +352,7 @@ const AutomationConsole = () => {
                             {jobs.length === 0 && <tr><td colSpan="4" style={{...styles.td, textAlign:'center'}}>No jobs configured.</td></tr>}
                         </tbody>
                     </table>
-                    {renderPagination(jobs.length)}
+                    {renderPagination(totalCounts.jobs)}
                 </div>
 
                 {activeRunId && (
@@ -338,7 +371,6 @@ const AutomationConsole = () => {
     };
 
     const renderGroupsTab = () => {
-        // Foundation for Phase 2!
         return (
             <div>
                 <div style={styles.headerRow}>
@@ -357,7 +389,6 @@ const AutomationConsole = () => {
     };
 
     const renderPlaybooksTab = () => {
-        const currentPlaybooks = playbooks.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage);
         return (
             <div>
                 <div style={styles.headerRow}>
@@ -377,7 +408,7 @@ const AutomationConsole = () => {
                             </tr>
                         </thead>
                         <tbody>
-                            {currentPlaybooks.map(pb => (
+                            {playbooks.map(pb => (
                                 <tr key={pb.id} style={styles.tr}>
                                     <td style={styles.td}><div style={{display:'flex', alignItems:'center', gap:'8px'}}><FileCode size={16} color="#3b82f6"/> <strong>{pb.name}</strong></div></td>
                                     <td style={styles.td}>{pb.description || '--'}</td>
@@ -391,14 +422,13 @@ const AutomationConsole = () => {
                             {playbooks.length === 0 && <tr><td colSpan="4" style={{...styles.td, textAlign:'center'}}>No playbooks found.</td></tr>}
                         </tbody>
                     </table>
-                    {renderPagination(playbooks.length)}
+                    {renderPagination(totalCounts.playbooks)}
                 </div>
             </div>
         );
     };
 
     const renderCredentialsTab = () => {
-        const currentCredentials = credentials.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage);
         return (
             <div>
                 <div style={styles.headerRow}>
@@ -418,7 +448,7 @@ const AutomationConsole = () => {
                             </tr>
                         </thead>
                         <tbody>
-                            {currentCredentials.map(c => (
+                            {credentials.map(c => (
                                 <tr key={c.id} style={styles.tr}>
                                     <td style={styles.td}><div style={{display:'flex', alignItems:'center', gap:'8px'}}><Key size={16} color="#ca8a04"/> <strong>{c.name}</strong></div></td>
                                     <td style={styles.td}><span style={styles.badgeDark}>{c.credential_type}</span></td>
@@ -432,14 +462,13 @@ const AutomationConsole = () => {
                             {credentials.length === 0 && <tr><td colSpan="4" style={{...styles.td, textAlign:'center'}}>Vault is empty.</td></tr>}
                         </tbody>
                     </table>
-                    {renderPagination(credentials.length)}
+                    {renderPagination(totalCounts.credentials)}
                 </div>
             </div>
         );
     };
 
     const renderEnvironmentsTab = () => {
-        const currentEnvironments = environments.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage);
         return (
             <div>
                 <div style={styles.headerRow}>
@@ -457,7 +486,7 @@ const AutomationConsole = () => {
                             </tr>
                         </thead>
                         <tbody>
-                            {currentEnvironments.map(e => (
+                            {environments.map(e => (
                                 <tr key={e.id} style={styles.tr}>
                                     <td style={styles.td}><div style={{display:'flex', alignItems:'center', gap:'8px'}}><Box size={16} color="#9333ea"/> <strong>{e.name}</strong></div></td>
                                     <td style={{...styles.td, textAlign: 'right'}}>
@@ -469,7 +498,7 @@ const AutomationConsole = () => {
                             {environments.length === 0 && <tr><td colSpan="2" style={{...styles.td, textAlign:'center'}}>No environments defined.</td></tr>}
                         </tbody>
                     </table>
-                    {renderPagination(environments.length)}
+                    {renderPagination(totalCounts.environments)}
                 </div>
             </div>
         );
@@ -487,8 +516,6 @@ const AutomationConsole = () => {
                 <button style={activeTab === 'playbooks' ? styles.tabActive : styles.tabInactive} onClick={() => { setActiveTab('playbooks'); setCurrentPage(1); }}><FileCode size={18} /> Playbooks</button>
                 <button style={activeTab === 'environments' ? styles.tabActive : styles.tabInactive} onClick={() => { setActiveTab('environments'); setCurrentPage(1); }}><Box size={18} /> Environments</button>
                 <button style={activeTab === 'credentials' ? styles.tabActive : styles.tabInactive} onClick={() => { setActiveTab('credentials'); setCurrentPage(1); }}><Key size={18} /> Vault</button>
-                
-                {/* THE NEW GROUPS TAB (PHASE 2) */}
                 <button style={activeTab === 'groups' ? styles.tabActive : styles.tabInactive} onClick={() => { setActiveTab('groups'); setCurrentPage(1); }}><Layers size={18} /> Groups</button>
             </div>
 
@@ -519,7 +546,7 @@ const AutomationConsole = () => {
                 </div>
             )}
 
-            {/* JOB MODAL (WITH NEW SCHEDULE PICKER) */}
+            {/* JOB MODAL */}
             {showJobModal && (
                 <div style={styles.modalOverlay}>
                     <div style={{...styles.modalContentSmall, maxWidth: '600px'}}>
@@ -528,7 +555,6 @@ const AutomationConsole = () => {
                             <label style={styles.label}>Job Name</label>
                             <input style={styles.input} value={jobForm.name} onChange={e => setJobForm({...jobForm, name: e.target.value})} />
                             
-                            {/* ADVANCED SCHEDULE COMPONENT */}
                             <SchedulePicker 
                                 cronString={jobForm.cron_schedule}
                                 startTime={jobForm.start_time}
@@ -554,7 +580,6 @@ const AutomationConsole = () => {
                                 {credentials.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
                             </select>
 
-                            {/* UPDATED TARGETS DROPDOWN (IP & HOSTNAME) */}
                             <label style={styles.label}>Target Devices (Hold CTRL/CMD to select multiple)</label>
                             <select multiple style={{...styles.input, height: '150px'}} value={jobForm.targets} onChange={e => {
                                 const options = [...e.target.selectedOptions];
@@ -594,14 +619,13 @@ const AutomationConsole = () => {
                 </div>
             )}
 
-            {/* CREDENTIAL MODAL (WITH ORGANIZATION) */}
+            {/* CREDENTIAL MODAL */}
             {showCredModal && (
                 <div style={styles.modalOverlay}>
                     <div style={styles.modalContentSmall}>
                         <div style={styles.modalHeader}><h2>{credForm.id ? 'Edit' : 'Add'} Credential</h2><button onClick={() => setShowCredModal(false)} style={styles.closeBtn}><X size={20}/></button></div>
                         <div style={styles.modalBody}>
                             
-                            {/* THE NEW ORGANIZATION DROPDOWN */}
                             <label style={styles.label}>Organization</label>
                             <select style={styles.input} value={credForm.organization} onChange={e => setCredForm({...credForm, organization: e.target.value})}>
                                 <option value="">-- Select Organization --</option>
@@ -622,30 +646,15 @@ const AutomationConsole = () => {
                             
                             <div style={{display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px'}}>
                                 <label style={{...styles.label, marginBottom: 0}}>Secret {credForm.id && "(Leave blank to keep existing)"}</label>
-                                <button 
-                                    type="button" 
-                                    onClick={() => setShowSecret(!showSecret)} 
-                                    style={{fontSize: '0.75rem', color: '#4f46e5', background: 'none', border: 'none', cursor: 'pointer', fontWeight: 'bold'}}
-                                >
+                                <button type="button" onClick={() => setShowSecret(!showSecret)} style={{fontSize: '0.75rem', color: '#4f46e5', background: 'none', border: 'none', cursor: 'pointer', fontWeight: 'bold'}}>
                                     {showSecret ? 'Hide Secret' : 'Show / Paste SSH Key'}
                                 </button>
                             </div>
                             
                             {showSecret ? (
-                                <textarea 
-                                    style={{...styles.input, height:'100px', fontFamily:'monospace'}} 
-                                    placeholder="Paste multiline SSH Private Key here..." 
-                                    value={credForm.secret} 
-                                    onChange={e => setCredForm({...credForm, secret: e.target.value})} 
-                                />
+                                <textarea style={{...styles.input, height:'100px', fontFamily:'monospace'}} placeholder="Paste multiline SSH Private Key here..." value={credForm.secret} onChange={e => setCredForm({...credForm, secret: e.target.value})} />
                             ) : (
-                                <input 
-                                    type="password" 
-                                    style={styles.input} 
-                                    placeholder="Enter Password..." 
-                                    value={credForm.secret} 
-                                    onChange={e => setCredForm({...credForm, secret: e.target.value})} 
-                                />
+                                <input type="password" style={styles.input} placeholder="Enter Password..." value={credForm.secret} onChange={e => setCredForm({...credForm, secret: e.target.value})} />
                             )}
                         </div>
                         <div style={styles.modalFooter}>
