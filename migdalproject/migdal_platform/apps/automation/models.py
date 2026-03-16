@@ -1,6 +1,8 @@
 import uuid
+import json
 from django.db import models
 from django_cryptography.fields import encrypt
+from django_celery_beat.models import PeriodicTask, CrontabSchedule
 from apps.accounts.models import Organization
 from apps.core.models import DataSource
 
@@ -92,9 +94,9 @@ class AutomationJob(models.Model):
     
     name = models.CharField(max_length=255, help_text="e.g., 'Weekly Nginx Patching'")
     
-    playbook = models.ForeignKey(Playbook, on_delete=models.RESTRICT)
-    environment = models.ForeignKey(ExecutionEnvironment, on_delete=models.RESTRICT)
-    credential = models.ForeignKey(Credential, on_delete=models.RESTRICT)
+    playbook = models.ForeignKey('Playbook', on_delete=models.RESTRICT)
+    environment = models.ForeignKey('ExecutionEnvironment', on_delete=models.RESTRICT)
+    credential = models.ForeignKey('Credential', on_delete=models.RESTRICT)
     
     # The dynamic inventory bridge mapping directly to Migdal's existing targets
     targets = models.ManyToManyField(DataSource, related_name='targeted_jobs')
@@ -105,6 +107,46 @@ class AutomationJob(models.Model):
 
     def __str__(self):
         return self.name
+
+    # 👇👇👇 ADD EVERYTHING BELOW THIS LINE 👇👇👇
+    def save(self, *args, **kwargs):
+        # 1. Save the job to the database first so it gets an ID
+        super().save(*args, **kwargs)
+        
+        # 2. Define a unique name for the Celery Beat task
+        task_name = f"Migdal-Job-{self.id}"
+        
+        # 3. If the job is active and has a cron schedule, wire it up!
+        if self.is_active and self.cron_schedule:
+            parts = self.cron_schedule.strip().split()
+            if len(parts) == 5:
+                schedule, _ = CrontabSchedule.objects.get_or_create(
+                    minute=parts[0],
+                    hour=parts[1],
+                    day_of_month=parts[2],
+                    month_of_year=parts[3],
+                    day_of_week=parts[4]
+                )
+                
+                # Tell Celery to run 'execute_scheduled_job' and pass this Job's ID
+                PeriodicTask.objects.update_or_create(
+                    name=task_name,
+                    defaults={
+                        'crontab': schedule,
+                        'task': 'apps.automation.tasks.execute_scheduled_job',
+                        'args': json.dumps([str(self.id)]), # Ensure UUID is converted to string for JSON
+                        'enabled': True
+                    }
+                )
+        else:
+            # 4. If disabled or no cron string, turn off the Celery task
+            PeriodicTask.objects.filter(name=task_name).update(enabled=False)
+
+    def delete(self, *args, **kwargs):
+        # Clean up the background task if the user deletes the Job entirely
+        task_name = f"Migdal-Job-{self.id}"
+        PeriodicTask.objects.filter(name=task_name).delete()
+        super().delete(*args, **kwargs)
 
 
 # --- 5. THE HISTORY (JOB RUNS) ---

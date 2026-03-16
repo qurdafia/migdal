@@ -30,8 +30,9 @@ echo "🛑 STEP 3: Spinning down current production stack..."
 podman-compose -f docker-compose.prod.yml down
 
 echo "------------------------------------------------"
-echo "🧹 STEP 4: Vaporizing old Web and Nginx images..."
-podman rmi localhost/migdal_web:latest localhost/migdal_nginx:latest || true
+echo "🧹 STEP 4: Vaporizing old images (Web, Nginx, Celery)..."
+# 👇 FIX 3: Added Celery worker and beat to the cleanup command
+podman rmi localhost/migdal_web:latest localhost/migdal_nginx:latest localhost/migdal_celery_worker:latest localhost/migdal_celery_beat:latest || true
 podman image prune -f
 
 echo "------------------------------------------------"

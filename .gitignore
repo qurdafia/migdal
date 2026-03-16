@@ -78,3 +78,6 @@ Thumbs.db
 *.swp
 *.swo
 .env.prod
+
+docker-compose-old.prod.yml
+docker-compose.dev.yml
