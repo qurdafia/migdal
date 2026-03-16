@@ -158,6 +158,11 @@ const AutomationConsole = () => {
     useEffect(() => {
         fetchDevices();
         fetchOrganizations();
+
+        fetchPlaybooks(1);
+        fetchCredentials(1);
+        fetchEnvironments(1);
+        
     }, []);
 
     // 2. Tab & Page Switcher Tracker (Automatically calls API when page changes)
