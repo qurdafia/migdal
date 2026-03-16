@@ -1,63 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import api from '../api';
-import { Terminal, FileCode, Key, Box, Plus, Save, X, Play, Edit2, Trash2, Activity, Layers, RefreshCw } from 'lucide-react';
+import { Terminal, FileCode, Key, Box, Plus, Save, X, Play, Edit2, Trash2, Activity } from 'lucide-react';
 import Editor from '@monaco-editor/react';
-
-// ==========================================
-// SUB-COMPONENT: ADVANCED SCHEDULE PICKER
-// ==========================================
-const SchedulePicker = ({ cronString, startTime, endTime, onChange }) => {
-    const parts = (cronString || "* * * * *").split(" ");
-    const [cron, setCron] = useState({
-        minute: parts[0] || '*', hour: parts[1] || '*',
-        day: parts[2] || '*', month: parts[3] || '*', weekday: parts[4] || '*'
-    });
-
-    const handleCronChange = (e) => {
-        const newCron = { ...cron, [e.target.name]: e.target.value };
-        setCron(newCron);
-        onChange(`${newCron.minute} ${newCron.hour} ${newCron.day} ${newCron.month} ${newCron.weekday}`, startTime, endTime);
-    };
-
-    const handleDateChange = (e) => {
-        onChange(`${cron.minute} ${cron.hour} ${cron.day} ${cron.month} ${cron.weekday}`, 
-            e.target.name === 'start_time' ? e.target.value : startTime, 
-            e.target.name === 'end_time' ? e.target.value : endTime
-        );
-    };
-
-    return (
-        <div style={{ backgroundColor: '#f9fafb', padding: '16px', borderRadius: '8px', border: '1px solid #e5e7eb', marginBottom: '16px' }}>
-            <h4 style={{ margin: '0 0 12px 0', fontSize: '0.9rem', color: '#374151' }}>⏱️ Execution Schedule</h4>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: '10px', marginBottom: '16px' }}>
-                {['minute', 'hour', 'day', 'month', 'weekday'].map(field => (
-                    <div key={field}>
-                        <label style={{ display: 'block', fontSize: '0.7rem', fontWeight: 'bold', color: '#6b7280', textTransform: 'uppercase' }}>{field}</label>
-                        <input type="text" name={field} value={cron[field]} onChange={handleCronChange} style={{...styles.input, marginBottom: 0, textAlign: 'center', fontFamily: 'monospace'}} placeholder="*" />
-                    </div>
-                ))}
-            </div>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
-                <div>
-                    <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: 'bold', color: '#374151', marginBottom: '4px' }}>Start Date & Time</label>
-                    <input type="datetime-local" name="start_time" value={startTime || ''} onChange={handleDateChange} style={{...styles.input, marginBottom: 0}} />
-                </div>
-                <div>
-                    <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: 'bold', color: '#374151', marginBottom: '4px' }}>Expiration Date (End)</label>
-                    <input type="datetime-local" name="end_time" value={endTime || ''} onChange={handleDateChange} style={{...styles.input, marginBottom: 0}} />
-                </div>
-            </div>
-            <div style={{ marginTop: '12px', padding: '8px', backgroundColor: '#eff6ff', color: '#1e40af', borderRadius: '4px', fontSize: '0.85rem', fontFamily: 'monospace' }}>
-                <strong>Generated Cron:</strong> {cron.minute} {cron.hour} {cron.day} {cron.month} {cron.weekday}
-            </div>
-        </div>
-    );
-};
-
 
 const AutomationConsole = () => {
     const [activeTab, setActiveTab] = useState('jobs');
-    const [isRefreshing, setIsRefreshing] = useState(false);
     
     // ==========================================
     // PAGINATION STATE
@@ -69,7 +16,6 @@ const AutomationConsole = () => {
     // GLOBAL DATA FOR DROPDOWNS
     // ==========================================
     const [devices, setDevices] = useState([]);
-    const [organizations, setOrganizations] = useState([]);
 
     // ==========================================
     // STATE: JOBS & EXECUTION
@@ -79,36 +25,42 @@ const AutomationConsole = () => {
     const [liveLogs, setLiveLogs] = useState("");
     const [runStatus, setRunStatus] = useState("");
     const [showJobModal, setShowJobModal] = useState(false);
-    const [jobForm, setJobForm] = useState({ id: null, name: '', playbook: '', environment: '', credential: '', targets: [], cron_schedule: '* * * * *', start_time: '', end_time: '', is_active: true });
+    const [jobForm, setJobForm] = useState({ id: null, name: '', playbook: '', environment: '', credential: '', targets: [], cron_schedule: '', is_active: true });
 
     // ==========================================
-    // STATE: RUNS, PLAYBOOKS, CREDENTIALS, ENVIRONMENTS, GROUPS
+    // STATE: RUNS (EXECUTION HISTORY)
     // ==========================================
     const [runs, setRuns] = useState([]);
     const [selectedRun, setSelectedRun] = useState(null);
     const [showRunModal, setShowRunModal] = useState(false);
 
+    // ==========================================
+    // STATE: PLAYBOOKS
+    // ==========================================
     const [playbooks, setPlaybooks] = useState([]);
     const [showPlaybookModal, setShowPlaybookModal] = useState(false);
     const [playbookForm, setPlaybookForm] = useState({ id: null, name: '', description: '', yaml_content: '---\n- name: Example\n  hosts: all\n  tasks:\n    - ping:\n' });
 
+    // ==========================================
+    // STATE: VAULT (CREDENTIALS)
+    // ==========================================
     const [credentials, setCredentials] = useState([]);
     const [showCredModal, setShowCredModal] = useState(false);
-    const [credForm, setCredForm] = useState({ id: null, organization: '', name: '', credential_type: 'machine', username: '', secret: '' });
+    const [credForm, setCredForm] = useState({ id: null, name: '', credential_type: 'machine', username: '', secret: '' });
     const [showSecret, setShowSecret] = useState(false);
 
+    // ==========================================
+    // STATE: ENVIRONMENTS
+    // ==========================================
     const [environments, setEnvironments] = useState([]);
     const [showEnvModal, setShowEnvModal] = useState(false);
     const [envForm, setEnvForm] = useState({ id: null, name: '', collections_json: '[\n  {"name": "community.general", "version": "latest"}\n]', python_packages_json: '[]' });
-
-    const [groups, setGroups] = useState([]); // Shell for Phase 2
 
     // ==========================================
     // LIFECYCLE ROUTER
     // ==========================================
     useEffect(() => {
         fetchDevices();
-        fetchOrganizations();
         fetchPlaybooks();
         fetchCredentials();
         fetchEnvironments();
@@ -119,29 +71,39 @@ const AutomationConsole = () => {
     // ==========================================
     // API FETCHERS
     // ==========================================
-    const fetchDevices = async () => { try { const res = await api.get('/core/devices/'); setDevices(res.data.results || res.data || []); } catch (e) { console.error(e); } };
-    const fetchOrganizations = async () => { try { const res = await api.get('/accounts/organizations/'); setOrganizations(res.data.results || res.data || []); } catch (e) { console.error(e); } };
-    
-    const fetchJobs = async () => { try { const res = await api.get('automation/jobs/'); setJobs(res.data.results || res.data || []); } catch (e) { console.error(e); } };
-    const fetchRuns = async () => { 
-        setIsRefreshing(true);
+    const fetchDevices = async () => {
+        try { const res = await api.get('/core/devices/'); setDevices(res.data.results || res.data || []); } catch (e) { console.error(e); }
+    };
+    const fetchJobs = async () => {
+        try { const res = await api.get('automation/jobs/'); setJobs(res.data.results || res.data || []); } catch (e) { console.error(e); }
+    };
+    const fetchRuns = async () => {
         try { 
             const res = await api.get('automation/job-runs/'); 
             const data = res.data.results || res.data || [];
             setRuns(data.sort((a, b) => b.id - a.id)); 
-        } catch (e) { console.error(e); } finally { setIsRefreshing(false); }
+        } catch (e) { console.error(e); }
     };
-    const fetchPlaybooks = async () => { try { const res = await api.get('automation/playbooks/'); setPlaybooks(res.data.results || res.data || []); } catch (e) { console.error(e); } };
-    const fetchCredentials = async () => { try { const res = await api.get('automation/credentials/'); setCredentials(res.data.results || res.data || []); } catch (e) { console.error(e); } };
-    const fetchEnvironments = async () => { try { const res = await api.get('automation/environments/'); setEnvironments(res.data.results || res.data || []); } catch (e) { console.error(e); } };
+    const fetchPlaybooks = async () => {
+        try { const res = await api.get('automation/playbooks/'); setPlaybooks(res.data.results || res.data || []); } catch (e) { console.error(e); }
+    };
+    const fetchCredentials = async () => {
+        try { const res = await api.get('automation/credentials/'); setCredentials(res.data.results || res.data || []); } catch (e) { console.error(e); }
+    };
+    const fetchEnvironments = async () => {
+        try { const res = await api.get('automation/environments/'); setEnvironments(res.data.results || res.data || []); } catch (e) { console.error(e); }
+    };
 
     // ==========================================
     // CRUD HANDLERS
     // ==========================================
     const handleSave = async (endpoint, formState, fetchFunc, setModalFunc, resetState) => {
         try {
-            if (formState.id) { await api.put(`automation/${endpoint}/${formState.id}/`, formState); } 
-            else { await api.post(`automation/${endpoint}/`, formState); }
+            if (formState.id) {
+                await api.put(`automation/${endpoint}/${formState.id}/`, formState);
+            } else {
+                await api.post(`automation/${endpoint}/`, formState);
+            }
             setModalFunc(false);
             fetchFunc();
             resetState();
@@ -150,8 +112,10 @@ const AutomationConsole = () => {
 
     const handleDelete = async (endpoint, id, fetchFunc) => {
         if (!window.confirm("Are you sure you want to delete this? This action cannot be undone.")) return;
-        try { await api.delete(`automation/${endpoint}/${id}/`); fetchFunc(); } 
-        catch (e) { alert("Failed to delete. It might be in use by a Job."); }
+        try {
+            await api.delete(`automation/${endpoint}/${id}/`);
+            fetchFunc();
+        } catch (e) { alert("Failed to delete. It might be in use by a Job."); }
     };
 
     // ==========================================
@@ -194,34 +158,41 @@ const AutomationConsole = () => {
     // MODAL OPENERS
     // ==========================================
     const openEditPlaybook = (pb) => { setPlaybookForm(pb); setShowPlaybookModal(true); };
-    const openEditCred = (c) => { setCredForm({ ...c, secret: '' }); setShowSecret(false); setShowCredModal(true); };
-    const openEditEnv = (e) => { setEnvForm({ ...e, collections_json: JSON.stringify(e.collections_json, null, 2), python_packages_json: JSON.stringify(e.python_packages_json, null, 2) }); setShowEnvModal(true); };
+    const openEditCred = (c) => { 
+        setCredForm({ ...c, secret: '' }); 
+        setShowSecret(false); 
+        setShowCredModal(true); 
+    };
+    const openEditEnv = (e) => { 
+        setEnvForm({ ...e, collections_json: JSON.stringify(e.collections_json, null, 2), python_packages_json: JSON.stringify(e.python_packages_json, null, 2) }); 
+        setShowEnvModal(true); 
+    };
     const openEditJob = (j) => { setJobForm(j); setShowJobModal(true); };
 
     // ==========================================
-    // PAGINATION HELPER (FIXED: ALWAYS VISIBLE)
+    // PAGINATION HELPER
     // ==========================================
     const renderPagination = (totalItems) => {
-        const totalPages = Math.max(1, Math.ceil(totalItems / itemsPerPage)); // Ensure at least 1 page
+        const totalPages = Math.ceil(totalItems / itemsPerPage);
+        if (totalPages <= 1) return null; 
 
         return (
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px 20px', backgroundColor: '#f9fafb', borderTop: '1px solid #e5e7eb' }}>
                 <span style={{ fontSize: '0.85rem', color: '#6b7280' }}>
-                    Showing <strong>{totalItems === 0 ? 0 : ((currentPage - 1) * itemsPerPage) + 1}</strong> to <strong>{Math.min(currentPage * itemsPerPage, totalItems)}</strong> of <strong>{totalItems}</strong> entries
+                    Showing <strong>{((currentPage - 1) * itemsPerPage) + 1}</strong> to <strong>{Math.min(currentPage * itemsPerPage, totalItems)}</strong> of <strong>{totalItems}</strong> entries
                 </span>
                 <div style={{ display: 'flex', gap: '8px' }}>
                     <button 
-                        disabled={currentPage <= 1} 
+                        disabled={currentPage === 1} 
                         onClick={() => setCurrentPage(currentPage - 1)}
-                        style={currentPage <= 1 ? styles.pageBtnDisabled : styles.pageBtn}
+                        style={currentPage === 1 ? styles.pageBtnDisabled : styles.pageBtn}
                     >
                         Previous
                     </button>
-                    <span style={{ fontSize: '0.85rem', padding: '6px 0', color: '#4b5563' }}>Page {currentPage} of {totalPages}</span>
                     <button 
-                        disabled={currentPage >= totalPages} 
+                        disabled={currentPage === totalPages} 
                         onClick={() => setCurrentPage(currentPage + 1)}
-                        style={currentPage >= totalPages ? styles.pageBtnDisabled : styles.pageBtn}
+                        style={currentPage === totalPages ? styles.pageBtnDisabled : styles.pageBtn}
                     >
                         Next
                     </button>
@@ -231,7 +202,7 @@ const AutomationConsole = () => {
     };
 
     // ==========================================
-    // RENDERERS
+    // RENDERERS (Now with Slicing!)
     // ==========================================
     const renderRunsTab = () => {
         const currentRuns = runs.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage);
@@ -239,11 +210,7 @@ const AutomationConsole = () => {
             <div>
                 <div style={styles.headerRow}>
                     <h2 style={styles.sectionTitle}>Execution History</h2>
-                    {/* FIXED REFRESH BUTTON */}
-                    <button style={styles.btnPrimary} onClick={() => { setCurrentPage(1); fetchRuns(); }}>
-                        <RefreshCw size={16} className={isRefreshing ? "animate-spin" : ""} /> 
-                        {isRefreshing ? "Refreshing..." : "Refresh Logs"}
-                    </button>
+                    <button style={styles.btnPrimary} onClick={fetchRuns}>↻ Refresh</button>
                 </div>
                 <div style={styles.card}>
                     <table style={styles.table}>
@@ -268,7 +235,9 @@ const AutomationConsole = () => {
                                     </td>
                                     <td style={styles.td}>{run.finished_at ? new Date(run.finished_at).toLocaleString() : 'Running...'}</td>
                                     <td style={{...styles.td, textAlign: 'right'}}>
-                                        <button onClick={() => { setSelectedRun(run); setShowRunModal(true); }} style={styles.btnSecondary}>View Output</button>
+                                        <button onClick={() => { setSelectedRun(run); setShowRunModal(true); }} style={styles.btnSecondary}>
+                                            View Output
+                                        </button>
                                     </td>
                                 </tr>
                             ))}
@@ -287,7 +256,7 @@ const AutomationConsole = () => {
             <div>
                 <div style={styles.headerRow}>
                     <h2 style={styles.sectionTitle}>Scheduled Jobs</h2>
-                    <button style={styles.btnPrimary} onClick={() => { setJobForm({ id: null, name: '', playbook: '', environment: '', credential: '', targets: [], cron_schedule: '* * * * *', start_time: '', end_time: '', is_active: true }); setShowJobModal(true); }}>
+                    <button style={styles.btnPrimary} onClick={() => { setJobForm({ id: null, name: '', playbook: '', environment: '', credential: '', targets: [], cron_schedule: '', is_active: true }); setShowJobModal(true); }}>
                         <Plus size={16} /> Create Job
                     </button>
                 </div>
@@ -333,25 +302,6 @@ const AutomationConsole = () => {
                         </div>
                     </div>
                 )}
-            </div>
-        );
-    };
-
-    const renderGroupsTab = () => {
-        // Foundation for Phase 2!
-        return (
-            <div>
-                <div style={styles.headerRow}>
-                    <h2 style={styles.sectionTitle}>Inventory Groups</h2>
-                    <button style={styles.btnPrimary} disabled><Plus size={16} /> Create Group</button>
-                </div>
-                <div style={styles.card}>
-                    <div style={{ padding: '40px', textAlign: 'center', color: '#6b7280' }}>
-                        <Layers size={48} style={{ margin: '0 auto 16px', color: '#9ca3af' }} />
-                        <h3>Coming in Phase 2</h3>
-                        <p>We need to create the Django Backend Models for "Groups" before we can build them here.</p>
-                    </div>
-                </div>
             </div>
         );
     };
@@ -403,7 +353,7 @@ const AutomationConsole = () => {
             <div>
                 <div style={styles.headerRow}>
                     <h2 style={styles.sectionTitle}>Secure Vault</h2>
-                    <button style={styles.btnPrimary} onClick={() => { setCredForm({ id: null, organization: '', name: '', credential_type: 'machine', username: '', secret: '' }); setShowCredModal(true); }}>
+                    <button style={styles.btnPrimary} onClick={() => { setCredForm({ id: null, name: '', credential_type: 'machine', username: '', secret: '' }); setShowCredModal(true); }}>
                         <Plus size={16} /> Add Credential
                     </button>
                 </div>
@@ -487,9 +437,6 @@ const AutomationConsole = () => {
                 <button style={activeTab === 'playbooks' ? styles.tabActive : styles.tabInactive} onClick={() => { setActiveTab('playbooks'); setCurrentPage(1); }}><FileCode size={18} /> Playbooks</button>
                 <button style={activeTab === 'environments' ? styles.tabActive : styles.tabInactive} onClick={() => { setActiveTab('environments'); setCurrentPage(1); }}><Box size={18} /> Environments</button>
                 <button style={activeTab === 'credentials' ? styles.tabActive : styles.tabInactive} onClick={() => { setActiveTab('credentials'); setCurrentPage(1); }}><Key size={18} /> Vault</button>
-                
-                {/* THE NEW GROUPS TAB (PHASE 2) */}
-                <button style={activeTab === 'groups' ? styles.tabActive : styles.tabInactive} onClick={() => { setActiveTab('groups'); setCurrentPage(1); }}><Layers size={18} /> Groups</button>
             </div>
 
             {/* CONTENT */}
@@ -498,7 +445,6 @@ const AutomationConsole = () => {
             {activeTab === 'playbooks' && renderPlaybooksTab()}
             {activeTab === 'environments' && renderEnvironmentsTab()}
             {activeTab === 'credentials' && renderCredentialsTab()}
-            {activeTab === 'groups' && renderGroupsTab()}
 
             {/* ========================================== */}
             {/* MODALS */}
@@ -519,22 +465,17 @@ const AutomationConsole = () => {
                 </div>
             )}
 
-            {/* JOB MODAL (WITH NEW SCHEDULE PICKER) */}
+            {/* JOB MODAL */}
             {showJobModal && (
                 <div style={styles.modalOverlay}>
-                    <div style={{...styles.modalContentSmall, maxWidth: '600px'}}>
+                    <div style={styles.modalContentSmall}>
                         <div style={styles.modalHeader}><h2>{jobForm.id ? 'Edit' : 'Create'} Job</h2><button onClick={() => setShowJobModal(false)} style={styles.closeBtn}><X size={20}/></button></div>
                         <div style={styles.modalBody}>
                             <label style={styles.label}>Job Name</label>
                             <input style={styles.input} value={jobForm.name} onChange={e => setJobForm({...jobForm, name: e.target.value})} />
                             
-                            {/* ADVANCED SCHEDULE COMPONENT */}
-                            <SchedulePicker 
-                                cronString={jobForm.cron_schedule}
-                                startTime={jobForm.start_time}
-                                endTime={jobForm.end_time}
-                                onChange={(cron, start, end) => setJobForm({...jobForm, cron_schedule: cron, start_time: start, end_time: end})} 
-                            />
+                            <label style={styles.label}>Cron Schedule (Leave blank for manual)</label>
+                            <input style={styles.input} placeholder="e.g. 0 2 * * 0" value={jobForm.cron_schedule} onChange={e => setJobForm({...jobForm, cron_schedule: e.target.value})} />
                             
                             <label style={styles.label}>Playbook</label>
                             <select style={styles.input} value={jobForm.playbook} onChange={e => setJobForm({...jobForm, playbook: e.target.value})}>
@@ -554,18 +495,13 @@ const AutomationConsole = () => {
                                 {credentials.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
                             </select>
 
-                            {/* UPDATED TARGETS DROPDOWN (IP & HOSTNAME) */}
                             <label style={styles.label}>Target Devices (Hold CTRL/CMD to select multiple)</label>
-                            <select multiple style={{...styles.input, height: '150px'}} value={jobForm.targets} onChange={e => {
+                            <select multiple style={{...styles.input, height: '100px'}} value={jobForm.targets} onChange={e => {
                                 const options = [...e.target.selectedOptions];
                                 const values = options.map(option => option.value);
                                 setJobForm({...jobForm, targets: values});
                             }}>
-                                {devices.map(d => (
-                                    <option key={d.id} value={d.id}>
-                                        {d.name} — IP: {d.ip_address || 'N/A'} | Host: {d.hostname || 'N/A'}
-                                    </option>
-                                ))}
+                                {devices.map(d => <option key={d.id} value={d.id}>{d.name} ({d.ip_address || 'No IP'})</option>)}
                             </select>
                         </div>
                         <div style={styles.modalFooter}>
@@ -594,20 +530,12 @@ const AutomationConsole = () => {
                 </div>
             )}
 
-            {/* CREDENTIAL MODAL (WITH ORGANIZATION) */}
+            {/* CREDENTIAL MODAL */}
             {showCredModal && (
                 <div style={styles.modalOverlay}>
                     <div style={styles.modalContentSmall}>
                         <div style={styles.modalHeader}><h2>{credForm.id ? 'Edit' : 'Add'} Credential</h2><button onClick={() => setShowCredModal(false)} style={styles.closeBtn}><X size={20}/></button></div>
                         <div style={styles.modalBody}>
-                            
-                            {/* THE NEW ORGANIZATION DROPDOWN */}
-                            <label style={styles.label}>Organization</label>
-                            <select style={styles.input} value={credForm.organization} onChange={e => setCredForm({...credForm, organization: e.target.value})}>
-                                <option value="">-- Select Organization --</option>
-                                {organizations.map(org => <option key={org.id} value={org.id}>{org.name}</option>)}
-                            </select>
-
                             <label style={styles.label}>Name</label>
                             <input style={styles.input} value={credForm.name} onChange={e => setCredForm({...credForm, name: e.target.value})} />
                             <label style={styles.label}>Type</label>
@@ -620,6 +548,7 @@ const AutomationConsole = () => {
                             <label style={styles.label}>Username</label>
                             <input style={styles.input} value={credForm.username} onChange={e => setCredForm({...credForm, username: e.target.value})} />
                             
+                            {/* THE SECURE SECRET TOGGLE */}
                             <div style={{display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px'}}>
                                 <label style={{...styles.label, marginBottom: 0}}>Secret {credForm.id && "(Leave blank to keep existing)"}</label>
                                 <button 
@@ -684,7 +613,7 @@ const AutomationConsole = () => {
 };
 
 // ==========================================
-// MATCHING STYLES
+// MATCHING STYLES (From your Dashboard.jsx)
 // ==========================================
 const styles = {
     container: { maxWidth: '1200px', margin: '0 auto', fontFamily: 'Inter, sans-serif' },
@@ -702,11 +631,12 @@ const styles = {
     tr: { borderBottom: '1px solid #e5e7eb', transition: '0.2s' },
     td: { padding: '16px', color: '#374151', fontSize: '0.9rem' },
     
-    btnPrimary: { backgroundColor: '#4f46e5', color: 'white', border: 'none', padding: '8px 16px', borderRadius: '6px', cursor: 'pointer', display: 'flex', gap: '8px', alignItems: 'center', fontWeight: '600' },
+    btnPrimary: { backgroundColor: '#4f46e5', color: 'white', border: 'none', padding: '8px 16px', borderRadius: '6px', cursor: 'pointer', display: 'flex', gap: '5px', alignItems: 'center', fontWeight: '600' },
     btnGreen: { backgroundColor: '#10b981', color: 'white', border: 'none', padding: '6px 12px', borderRadius: '6px', cursor: 'pointer', display: 'flex', gap: '5px', alignItems: 'center', fontWeight: '600' },
     btnSecondary: { backgroundColor: '#374151', color: 'white', border: 'none', padding: '6px 12px', borderRadius: '6px', cursor: 'pointer', fontSize: '0.85rem' },
     iconBtn: { background: 'none', border: 'none', cursor: 'pointer', padding: '4px' },
     
+    // Pagination Buttons
     pageBtn: { backgroundColor: 'white', border: '1px solid #d1d5db', color: '#374151', padding: '6px 12px', borderRadius: '6px', cursor: 'pointer', fontSize: '0.85rem', fontWeight: '500', transition: '0.2s' },
     pageBtnDisabled: { backgroundColor: '#f3f4f6', border: '1px solid #e5e7eb', color: '#9ca3af', padding: '6px 12px', borderRadius: '6px', cursor: 'not-allowed', fontSize: '0.85rem', fontWeight: '500' },
 
@@ -719,6 +649,7 @@ const styles = {
     terminalBody: { padding: '16px', height: '300px', overflowY: 'auto' },
     terminalText: { color: '#4ade80', fontFamily: 'monospace', fontSize: '0.9rem', margin: 0, whiteSpace: 'pre-wrap' },
 
+    // Modals
     modalOverlay: { position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.5)', display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 1000, padding: '20px' },
     modalContentSmall: { backgroundColor: 'white', borderRadius: '12px', width: '100%', maxWidth: '500px', overflow: 'hidden', display: 'flex', flexDirection: 'column' },
     modalContentLarge: { backgroundColor: 'white', borderRadius: '12px', width: '100%', maxWidth: '1000px', height: '85vh', overflow: 'hidden', display: 'flex', flexDirection: 'column' },
@@ -727,6 +658,7 @@ const styles = {
     modalFooter: { padding: '16px 20px', borderTop: '1px solid #e5e7eb', backgroundColor: '#f9fafb', display: 'flex', justifyContent: 'flex-end' },
     closeBtn: { background: 'none', border: 'none', cursor: 'pointer', color: '#6b7280' },
     
+    // Forms
     label: { display: 'block', marginBottom: '8px', fontSize: '0.85rem', fontWeight: 'bold', color: '#374151' },
     input: { width: '100%', padding: '10px', border: '1px solid #d1d5db', borderRadius: '6px', marginBottom: '16px', fontSize: '0.9rem', outline: 'none', boxSizing: 'border-box', backgroundColor: 'white' }
 };
