@@ -1,4 +1,5 @@
 from rest_framework.views import APIView
+from rest_framework import viewsets
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.permissions import AllowAny
@@ -16,6 +17,7 @@ from rest_framework.authtoken.models import Token
 from django.views.decorators.csrf import csrf_exempt
 from django.utils.decorators import method_decorator
 
+from .serializers import OrganizationSerializer
 
 logger = logging.getLogger(__name__)
 
@@ -120,3 +122,17 @@ class LicenseStatusView(APIView):
             "expiry_date": org.license_expiry,
             "key_preview": key_preview
         })
+
+
+class OrganizationViewSet(viewsets.ReadOnlyModelViewSet):
+    serializer_class = OrganizationSerializer
+    permission_classes = [IsAuthenticated]
+
+    def get_queryset(self):
+        # 🛡️ Superusers see all orgs, regular users only see their own
+        user = self.request.user
+        if user.is_superuser:
+            return Organization.objects.all().order_by('name')
+        if user.organization:
+            return Organization.objects.filter(id=user.organization.id).order_by('name')
+        return Organization.objects.none()

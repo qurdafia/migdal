@@ -32,7 +32,7 @@ class PlaybookSerializer(serializers.ModelSerializer):
 class AutomationJobSerializer(serializers.ModelSerializer):
     class Meta:
         model = AutomationJob
-        fields = ['id', 'name', 'playbook', 'environment', 'credential', 'targets', 'cron_schedule', 'is_active']
+        fields = ['id', 'name', 'playbook', 'environment', 'credential', 'targets', 'target_groups', 'cron_schedule', 'is_active']
 
 class JobRunSerializer(serializers.ModelSerializer):
     # Expose the string name of the job for the React table

@@ -19,15 +19,6 @@ class CredentialAdmin(admin.ModelAdmin):
     list_display = ('name', 'credential_type', 'username')
     search_fields = ('name', 'username')
 
-# @admin.register(Credential)
-# class CredentialAdmin(admin.ModelAdmin):
-#     list_display = ('name', 'credential_type', 'username', 'organization')
-#     search_fields = ('name', 'username')
-#     list_filter = ('credential_type', 'organization')
-    
-#     # We do NOT put 'secret' in list_display for security reasons!
-#     fields = ('organization', 'name', 'credential_type', 'username', 'secret')
-
 @admin.register(ExecutionEnvironment)
 class ExecutionEnvironmentAdmin(admin.ModelAdmin):
     list_display = ('name', 'organization')
@@ -42,6 +33,7 @@ class PlaybookAdmin(admin.ModelAdmin):
     
     # Make the YAML text area take up more space
     fields = ('organization', 'name', 'description', 'yaml_content')
+    
 
 @admin.register(AutomationJob)
 class AutomationJobAdmin(admin.ModelAdmin):
@@ -49,8 +41,7 @@ class AutomationJobAdmin(admin.ModelAdmin):
     search_fields = ('name',)
     list_filter = ('is_active', 'organization')
     
-    # 🎨 UX MAGIC: This renders the target DataSources as a beautiful dual-list box
-    filter_horizontal = ('targets',)
+    filter_horizontal = ('targets', 'target_groups')
     
     fields = (
         'organization', 
@@ -60,8 +51,11 @@ class AutomationJobAdmin(admin.ModelAdmin):
         'environment', 
         'credential', 
         'targets', 
+        'target_groups',
         'cron_schedule'
     )
+
+
 
 @admin.register(JobRun)
 class JobRunAdmin(admin.ModelAdmin):

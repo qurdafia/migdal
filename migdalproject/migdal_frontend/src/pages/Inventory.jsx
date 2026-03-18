@@ -18,7 +18,8 @@ const Inventory = () => {
     
     // --- DATA STATES ---
     const [selectedDevice, setSelectedDevice] = useState(null); 
-    const [deviceForm, setDeviceForm] = useState({ name: '', type: 'server' }); 
+    // 👇 ADDED: ip_address and hostname to the default form state
+    const [deviceForm, setDeviceForm] = useState({ name: '', type: 'server', ip_address: '', hostname: '' }); 
     const [currentMetrics, setCurrentMetrics] = useState([]); 
     const [metricForm, setMetricForm] = useState({ label: '', json_path: '', unit: '', threshold_warning: '', threshold_critical: '' });
 
@@ -26,18 +27,16 @@ const Inventory = () => {
     // 1. DEVICE MANAGEMENT
     // ==========================
     
-    // ⏳ Debounced Fetch: Only triggers after the user stops typing for 500ms
     useEffect(() => {
         const delayDebounceFn = setTimeout(() => {
             fetchDevices();
         }, 500);
 
         return () => clearTimeout(delayDebounceFn);
-    }, [searchTerm, currentPage]); // Re-run when search or page changes
+    }, [searchTerm, currentPage]); 
 
     const fetchDevices = async () => {
         try {
-            // Pass the search term and page number to your Django view!
             const res = await api.get('/core/devices/', {
                 params: {
                     search: searchTerm,
@@ -48,7 +47,6 @@ const Inventory = () => {
             const rawData = res.data.results || res.data;
             setDevices(Array.isArray(rawData) ? rawData : []);
             
-            // Calculate total pages (Assuming default Django REST framework pagination size of 10)
             if (res.data.count !== undefined) {
                 setTotalPages(Math.ceil(res.data.count / 10) || 1);
             } else {
@@ -59,16 +57,23 @@ const Inventory = () => {
 
     const handleSearchChange = (e) => {
         setSearchTerm(e.target.value);
-        setCurrentPage(1); // Reset to page 1 whenever the user types a new search
+        setCurrentPage(1); 
     };
 
     const openDeviceModal = (device = null) => {
         if (device) {
             setSelectedDevice(device);
-            setDeviceForm({ name: device.name, type: device.type });
+            // 👇 ADDED: Map existing IP and Hostname to the form when editing
+            setDeviceForm({ 
+                name: device.name, 
+                type: device.type,
+                ip_address: device.ip_address || '',
+                hostname: device.hostname || ''
+            });
         } else {
             setSelectedDevice(null);
-            setDeviceForm({ name: '', type: 'server' });
+            // 👇 ADDED: Clear IP and Hostname for new devices
+            setDeviceForm({ name: '', type: 'server', ip_address: '', hostname: '' });
         }
         setIsDeviceModalOpen(true);
     };
@@ -76,16 +81,18 @@ const Inventory = () => {
     const handleDeviceSubmit = async (e) => {
         e.preventDefault();
         try {
+            // 👇 ADDED: Include IP and Hostname in the payload
+            const payload = {
+                name: deviceForm.name,
+                type: deviceForm.type,
+                ip_address: deviceForm.ip_address || null, // Send null if empty so Django doesn't complain
+                hostname: deviceForm.hostname || null
+            };
+
             if (selectedDevice) {
-                await api.put(`/core/devices/manage/${selectedDevice.id}/`, {
-                    name: deviceForm.name,
-                    type: deviceForm.type 
-                });
+                await api.put(`/core/devices/manage/${selectedDevice.id}/`, payload);
             } else {
-                await api.post('/core/devices/manage/', {
-                    name: deviceForm.name,
-                    type: deviceForm.type
-                });
+                await api.post('/core/devices/manage/', payload);
             }
             setIsDeviceModalOpen(false);
             fetchDevices();
@@ -158,12 +165,6 @@ const Inventory = () => {
     return (
         <div style={styles.container}>
             <div style={styles.header}>
-                {/* <div style={{display: 'flex', alignItems: 'center', gap: '20px'}}>
-                    <button onClick={() => navigate('/infrastructure/hypervisor')} style={styles.backBtn}>
-                        <ArrowLeft size={16} /> Dashboard
-                    </button>
-                    <h1 style={styles.title}>Device Inventory</h1>
-                </div> */}
                 <div>
                     <h1 style={styles.title}>Device Inventory</h1>
                 </div>
@@ -172,7 +173,7 @@ const Inventory = () => {
                 </button>
             </div>
 
-            {/* --- NEW TOOLBAR: SEARCH --- */}
+            {/* --- TOOLBAR: SEARCH --- */}
             <div style={styles.toolbar}>
                 <div style={styles.searchBox}>
                     <Search size={18} color="#6b7280" />
@@ -212,6 +213,11 @@ const Inventory = () => {
                                     <label>IP:</label> 
                                     <span style={{marginLeft: '5px', fontFamily:'monospace', color:'#666'}}>{device.ip_address || device.reported_ip || 'N/A'}</span>
                                 </div>
+                                {/* 👇 ADDED: Display Hostname on the Card */}
+                                <div style={styles.field}>
+                                    <label>Hostname:</label> 
+                                    <span style={{marginLeft: '5px', fontFamily:'monospace', color:'#666'}}>{device.hostname || 'N/A'}</span>
+                                </div>
                             </div>
 
                             <div style={styles.cardFooter}>
@@ -230,7 +236,7 @@ const Inventory = () => {
                 </div>
             )}
 
-            {/* --- NEW PAGINATION CONTROLS --- */}
+            {/* --- PAGINATION CONTROLS --- */}
             {totalPages > 1 && (
                 <div style={styles.pagination}>
                     <button disabled={currentPage === 1} onClick={() => setCurrentPage(p => p - 1)} style={styles.pageBtn}>
@@ -272,6 +278,29 @@ const Inventory = () => {
                                     <option value="hypervisor">Hypervisor</option>
                                 </select>
                             </div>
+                            
+                            {/* 👇 ADDED: Input for IP Address */}
+                            <div style={styles.inputGroup}>
+                                <label>IP Address (Optional)</label>
+                                <input 
+                                    placeholder="e.g. 192.168.1.100"
+                                    value={deviceForm.ip_address || ''} 
+                                    onChange={e => setDeviceForm({...deviceForm, ip_address: e.target.value})}
+                                    style={styles.input}
+                                />
+                            </div>
+
+                            {/* 👇 ADDED: Input for Hostname */}
+                            <div style={styles.inputGroup}>
+                                <label>Hostname (Optional)</label>
+                                <input 
+                                    placeholder="e.g. srv-web-01.local"
+                                    value={deviceForm.hostname || ''} 
+                                    onChange={e => setDeviceForm({...deviceForm, hostname: e.target.value})}
+                                    style={styles.input}
+                                />
+                            </div>
+
                             <div style={styles.modalActions}>
                                 <button type="button" onClick={() => setIsDeviceModalOpen(false)} style={styles.cancelBtn}>Cancel</button>
                                 <button type="submit" style={styles.saveBtn}>Save</button>
@@ -355,20 +384,17 @@ const Inventory = () => {
 };
 
 const styles = {
-    // container: { padding: '30px', fontFamily: 'Inter, sans-serif' },
     container: { maxWidth: '1000px', margin: '0 auto', paddingBottom: '40px' },
     header: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' },
     title: { display: 'flex', alignItems: 'center', gap: '10px', fontSize: '1.5rem', margin: '0 0 5px 0' },
     backBtn: { background: 'none', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '5px', color: '#666' },
     addBtn: { backgroundColor: '#2563eb', color: 'white', border: 'none', padding: '10px 20px', borderRadius: '6px', cursor: 'pointer', display: 'flex', gap: '5px', alignItems: 'center' },
     
-    // Search Toolbar Styles
     toolbar: { display: 'flex', justifyContent: 'space-between', marginBottom: '20px' },
     searchBox: { display: 'flex', alignItems: 'center', backgroundColor: 'white', padding: '8px 15px', borderRadius: '8px', border: '1px solid #d1d5db', width: '350px', gap: '10px', boxShadow: '0 1px 2px rgba(0,0,0,0.05)' },
     searchInput: { border: 'none', outline: 'none', width: '100%', fontSize: '0.95rem' },
     emptyState: { padding: '40px', textAlign: 'center', color: '#6b7280', backgroundColor: 'white', borderRadius: '8px', border: '1px dashed #d1d5db' },
 
-    // Pagination Styles
     pagination: { display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '15px', marginTop: '30px' },
     pageBtn: { padding: '8px 16px', borderRadius: '6px', border: '1px solid #d1d5db', backgroundColor: 'white', cursor: 'pointer', color: '#374151' },
 

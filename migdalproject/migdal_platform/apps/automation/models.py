@@ -4,7 +4,7 @@ from django.db import models
 from django_cryptography.fields import encrypt
 from django_celery_beat.models import PeriodicTask, CrontabSchedule
 from apps.accounts.models import Organization
-from apps.core.models import DataSource
+from apps.core.models import DataSource, DeviceGroup
 
 # --- 1. THE VAULT (CREDENTIALS) ---
 class Credential(models.Model):
@@ -100,6 +100,8 @@ class AutomationJob(models.Model):
     
     # The dynamic inventory bridge mapping directly to Migdal's existing targets
     targets = models.ManyToManyField(DataSource, related_name='targeted_jobs')
+
+    target_groups = models.ManyToManyField(DeviceGroup, related_name='targeted_jobs', blank=True)
     
     # Scheduling (Using standard Cron syntax)
     cron_schedule = models.CharField(max_length=100, blank=True, null=True, help_text="e.g., '0 2 * * 0' for every Sunday at 2 AM")

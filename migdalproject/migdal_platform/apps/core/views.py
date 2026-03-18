@@ -1,12 +1,12 @@
 # apps/core/views.py
-from rest_framework import generics, status
+from rest_framework import generics, status, viewsets
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.authentication import TokenAuthentication 
 
-from .models import DataSource, TelemetryRecord, MetricDefinition, EmailConfiguration
-from .serializers import DataSourceSerializer, TelemetryRecordSerializer, MetricDefinitionSerializer, EmailConfigurationSerializer
+from .models import DataSource, TelemetryRecord, MetricDefinition, EmailConfiguration, DeviceGroup
+from .serializers import DataSourceSerializer, TelemetryRecordSerializer, MetricDefinitionSerializer, EmailConfigurationSerializer, DeviceGroupSerializer
 from .authentication import AnsibleApiKeyAuthentication
 
 # --- THE NEW CONSOLIDATED NOTIFICATION IMPORT ---
@@ -188,28 +188,17 @@ class EmailConfigView(APIView):
         return Response(serializer.errors, status=400)
 
 
-# --- 6. EMAIL CONFIG VIEW ---
-# class EmailConfigView(APIView):
-#     permission_classes = [IsAuthenticated]
+class DeviceGroupViewSet(viewsets.ModelViewSet):
+    serializer_class = DeviceGroupSerializer
+    permission_classes = [IsAuthenticated]
 
-#     def get(self, request):
-#         config, created = EmailConfiguration.objects.get_or_create(id=1)
-#         serializer = EmailConfigurationSerializer(config)
-#         return Response(serializer.data)
+    def get_queryset(self):
+        # 🛡️ Multi-tenant security: Only show groups for the user's organization
+        user = self.request.user
+        if user.is_superuser:
+            return DeviceGroup.objects.all().order_by('-created_at')
+        return DeviceGroup.objects.filter(organization=user.organization).order_by('-created_at')
 
-#     def put(self, request):
-#         config, created = EmailConfiguration.objects.get_or_create(id=1)
-#         serializer = EmailConfigurationSerializer(config, data=request.data, partial=True)
-#         if serializer.is_valid():
-#             serializer.save()
-#             return Response(serializer.data)
-#         return Response(serializer.errors, status=400)
-
-
-# apps/core/views.py
-
-# def spoof_error_view(request):
-#     """
-#     A temporary endpoint designed to instantly crash Migdal.
-#     """
-#     raise Exception("🚨 MIGDAL MANUAL SABOTAGE TEST: System critical failure simulated! 🚨")
+    def perform_create(self, serializer):
+        # 🛡️ Automatically assign the group to the user's organization upon creation
+        serializer.save(organization=self.request.user.organization)

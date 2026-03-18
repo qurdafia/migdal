@@ -1,5 +1,5 @@
 from django.contrib import admin
-from .models import DataSource, MetricDefinition, TelemetryRecord, EmailConfiguration
+from .models import DataSource, MetricDefinition, TelemetryRecord, EmailConfiguration, DeviceGroup
 from django import forms
 
 # (Keep your other core admin registrations like DataSource here)
@@ -74,31 +74,25 @@ class EmailConfigurationAdmin(admin.ModelAdmin):
         'message_body'
     )
 
-# @admin.register(EmailConfiguration)
-# class EmailConfigurationAdmin(admin.ModelAdmin):
-#     form = EmailConfigurationForm 
-    
-#     list_display = ['__str__', 'smtp_server', 'from_address', 'is_active']
-    
-#     fieldsets = (
-#         ('SMTP Server Settings', {
-#             'fields': ('smtp_server', 'smtp_port', 'smtp_username', 'smtp_password', 'use_tls')
-#         }),
-#         ('Routing', {
-#             'fields': ('from_address', 'recipient_list', 'is_active')
-#         }),
-#         ('Email Template', {
-#             'fields': ('subject', 'message_body')
-#         }),
-#     )
 
-#     def has_add_permission(self, request):
-#         if self.model.objects.exists():
-#             return False
-#         return True
+@admin.register(DeviceGroup)
+class DeviceGroupAdmin(admin.ModelAdmin):
+    # What columns to show in the list view
+    list_display = ('name', 'organization', 'get_device_count', 'created_at')
+    
+    # Add a search bar
+    search_fields = ('name', 'description')
+    
+    # Add a filter sidebar
+    list_filter = ('organization',)
+    
+    # 🌟 MAGIC: This turns the standard multi-select box into a beautiful side-by-side picker!
+    filter_horizontal = ('devices',)
 
-#     def has_delete_permission(self, request, obj=None):
-#         return False
+    # Custom column to show how many devices are in this group
+    def get_device_count(self, obj):
+        return obj.devices.count()
+    get_device_count.short_description = 'Number of Devices'
 
 
 admin.site.register(DataSource, DataSourceAdmin)

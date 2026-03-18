@@ -65,9 +65,8 @@ const AutomationConsole = () => {
     const [currentPage, setCurrentPage] = useState(1);
     const itemsPerPage = 10;
     
-    // This tracks the REAL total count straight from Django's database
     const [totalCounts, setTotalCounts] = useState({
-        jobs: 0, runs: 0, playbooks: 0, credentials: 0, environments: 0
+        jobs: 0, runs: 0, playbooks: 0, credentials: 0, environments: 0, groups: 0
     });
 
     // ==========================================
@@ -84,7 +83,8 @@ const AutomationConsole = () => {
     const [liveLogs, setLiveLogs] = useState("");
     const [runStatus, setRunStatus] = useState("");
     const [showJobModal, setShowJobModal] = useState(false);
-    const [jobForm, setJobForm] = useState({ id: null, name: '', playbook: '', environment: '', credential: '', targets: [], cron_schedule: '* * * * *', start_time: '', end_time: '', is_active: true });
+    
+    const [jobForm, setJobForm] = useState({ id: null, name: '', playbook: '', environment: '', credential: '', targets: [], target_groups: [], cron_schedule: '* * * * *', start_time: '', end_time: '', is_active: true });
 
     const [runs, setRuns] = useState([]);
     const [selectedRun, setSelectedRun] = useState(null);
@@ -103,15 +103,19 @@ const AutomationConsole = () => {
     const [showEnvModal, setShowEnvModal] = useState(false);
     const [envForm, setEnvForm] = useState({ id: null, name: '', collections_json: '[\n  {"name": "community.general", "version": "latest"}\n]', python_packages_json: '[]' });
 
+    const [groups, setGroups] = useState([]);
+    const [showGroupModal, setShowGroupModal] = useState(false);
+    const [groupForm, setGroupForm] = useState({ id: null, organization: '', name: '', description: '', devices: [] });
+
     // ==========================================
-    // API FETCHERS (NOW USING ?page=X)
+    // API FETCHERS
     // ==========================================
     const fetchDevices = async () => { try { const res = await api.get('/core/devices/?page_size=1000'); setDevices(res.data.results || res.data || []); } catch (e) { console.error(e); } };
-    const fetchOrganizations = async () => { try { const res = await api.get('/accounts/organizations/?page_size=1000'); setOrganizations(res.data.results || res.data || []); } catch (e) { console.error(e); } };
+    const fetchOrganizations = async () => { try { const res = await api.get('/accounts/organizations/?page_size=1000'); setOrganizations(res.data.results || res.data || []); } catch (e) { console.error("Error fetching orgs:", e); } };
     
     const fetchJobs = async (page = 1) => { 
         try { 
-            const res = await api.get(`automation/jobs/?page=${page}`); 
+            const res = await api.get(`/automation/jobs/?page=${page}`); 
             setJobs(res.data.results || res.data || []); 
             setTotalCounts(prev => ({ ...prev, jobs: res.data.count || (Array.isArray(res.data) ? res.data.length : 0) }));
         } catch (e) { console.error(e); } 
@@ -120,7 +124,7 @@ const AutomationConsole = () => {
     const fetchRuns = async (page = 1) => { 
         setIsRefreshing(true);
         try { 
-            const res = await api.get(`automation/job-runs/?page=${page}`); 
+            const res = await api.get(`/automation/job-runs/?page=${page}`); 
             setRuns(res.data.results || res.data || []); 
             setTotalCounts(prev => ({ ...prev, runs: res.data.count || (Array.isArray(res.data) ? res.data.length : 0) }));
         } catch (e) { console.error(e); } finally { setIsRefreshing(false); }
@@ -128,7 +132,7 @@ const AutomationConsole = () => {
     
     const fetchPlaybooks = async (page = 1) => { 
         try { 
-            const res = await api.get(`automation/playbooks/?page=${page}`); 
+            const res = await api.get(`/automation/playbooks/?page=${page}`); 
             setPlaybooks(res.data.results || res.data || []); 
             setTotalCounts(prev => ({ ...prev, playbooks: res.data.count || (Array.isArray(res.data) ? res.data.length : 0) }));
         } catch (e) { console.error(e); } 
@@ -136,7 +140,7 @@ const AutomationConsole = () => {
     
     const fetchCredentials = async (page = 1) => { 
         try { 
-            const res = await api.get(`automation/credentials/?page=${page}`); 
+            const res = await api.get(`/automation/credentials/?page=${page}`); 
             setCredentials(res.data.results || res.data || []); 
             setTotalCounts(prev => ({ ...prev, credentials: res.data.count || (Array.isArray(res.data) ? res.data.length : 0) }));
         } catch (e) { console.error(e); } 
@@ -144,54 +148,62 @@ const AutomationConsole = () => {
     
     const fetchEnvironments = async (page = 1) => { 
         try { 
-            const res = await api.get(`automation/environments/?page=${page}`); 
+            const res = await api.get(`/automation/environments/?page=${page}`); 
             setEnvironments(res.data.results || res.data || []); 
             setTotalCounts(prev => ({ ...prev, environments: res.data.count || (Array.isArray(res.data) ? res.data.length : 0) }));
         } catch (e) { console.error(e); } 
     };
 
+    const fetchGroups = async (page = 1) => { 
+        try { 
+            const res = await api.get(`/core/groups/?page=${page}&page_size=100`); 
+            setGroups(res.data.results || res.data || []); 
+            setTotalCounts(prev => ({ ...prev, groups: res.data.count || (Array.isArray(res.data) ? res.data.length : 0) }));
+        } catch (e) { console.error("Error fetching groups:", e); } 
+    };
+
     // ==========================================
     // LIFECYCLE ROUTERS
     // ==========================================
-    
-    // 1. Initial Load of Dropdown Data
     useEffect(() => {
         fetchDevices();
         fetchOrganizations();
-
         fetchPlaybooks(1);
         fetchCredentials(1);
         fetchEnvironments(1);
-        
+        fetchGroups(1); 
     }, []);
 
-    // 2. Tab & Page Switcher Tracker (Automatically calls API when page changes)
     useEffect(() => {
         if (activeTab === 'jobs') fetchJobs(currentPage);
         if (activeTab === 'runs') fetchRuns(currentPage);
         if (activeTab === 'playbooks') fetchPlaybooks(currentPage);
         if (activeTab === 'credentials') fetchCredentials(currentPage);
         if (activeTab === 'environments') fetchEnvironments(currentPage);
+        if (activeTab === 'groups') fetchGroups(currentPage);
     }, [activeTab, currentPage]);
 
 
     // ==========================================
     // CRUD HANDLERS
     // ==========================================
-    const handleSave = async (endpoint, formState, fetchFunc, setModalFunc, resetState) => {
+    const handleSave = async (apiPath, formState, fetchFunc, setModalFunc, resetState) => {
         try {
-            if (formState.id) { await api.put(`automation/${endpoint}/${formState.id}/`, formState); } 
-            else { await api.post(`automation/${endpoint}/`, formState); }
+            if (formState.id) { 
+                await api.put(`${apiPath}/${formState.id}/`, formState); 
+            } else { 
+                await api.post(`${apiPath}/`, formState); 
+            }
             setModalFunc(false);
             fetchFunc(currentPage);
             resetState();
         } catch (e) { alert(`Failed to save. Error: ${e.response?.data ? JSON.stringify(e.response.data) : e.message}`); }
     };
 
-    const handleDelete = async (endpoint, id, fetchFunc) => {
+    const handleDelete = async (apiPath, id, fetchFunc) => {
         if (!window.confirm("Are you sure you want to delete this? This action cannot be undone.")) return;
-        try { await api.delete(`automation/${endpoint}/${id}/`); fetchFunc(currentPage); } 
-        catch (e) { alert("Failed to delete. It might be in use by a Job."); }
+        try { await api.delete(`${apiPath}/${id}/`); fetchFunc(currentPage); } 
+        catch (e) { alert("Failed to delete. It might be in use."); }
     };
 
     // ==========================================
@@ -201,7 +213,7 @@ const AutomationConsole = () => {
         setLiveLogs("Initializing job... waiting for backend engine...");
         setRunStatus("pending");
         try {
-            const res = await api.post(`automation/jobs/${jobId}/execute/`);
+            const res = await api.post(`/automation/jobs/${jobId}/execute/`);
             if (res.data.run_id) setActiveRunId(res.data.run_id);
             fetchRuns(currentPage); 
         } catch (error) { setLiveLogs("Critical Error: Could not reach the Migdal backend."); }
@@ -212,13 +224,13 @@ const AutomationConsole = () => {
         const pollLogs = async () => {
             if (!activeRunId) return;
             try {
-                const res = await api.get(`automation/job-runs/${activeRunId}/`);
+                const res = await api.get(`/automation/job-runs/${activeRunId}/`);
                 setRunStatus(res.data.status);
                 if (res.data.stdout) setLiveLogs(res.data.stdout);
                 
                 if (['successful', 'failed', 'canceled'].includes(res.data.status)) {
                     clearInterval(pollInterval);
-                    fetchRuns(1); // Reset to page 1 to see the new finished run at the top
+                    fetchRuns(1); 
                     setCurrentPage(1);
                 }
             } catch (e) { console.error(e); }
@@ -238,9 +250,10 @@ const AutomationConsole = () => {
     const openEditCred = (c) => { setCredForm({ ...c, secret: '' }); setShowSecret(false); setShowCredModal(true); };
     const openEditEnv = (e) => { setEnvForm({ ...e, collections_json: JSON.stringify(e.collections_json, null, 2), python_packages_json: JSON.stringify(e.python_packages_json, null, 2) }); setShowEnvModal(true); };
     const openEditJob = (j) => { setJobForm(j); setShowJobModal(true); };
+    const openEditGroup = (g) => { setGroupForm(g); setShowGroupModal(true); };
 
     // ==========================================
-    // PAGINATION HELPER (FIXED FOR SERVER-SIDE)
+    // PAGINATION HELPER
     // ==========================================
     const renderPagination = (totalItems) => {
         const totalPages = Math.max(1, Math.ceil(totalItems / itemsPerPage)); 
@@ -251,28 +264,16 @@ const AutomationConsole = () => {
                     Showing <strong>{totalItems === 0 ? 0 : ((currentPage - 1) * itemsPerPage) + 1}</strong> to <strong>{Math.min(currentPage * itemsPerPage, totalItems)}</strong> of <strong>{totalItems}</strong> entries
                 </span>
                 <div style={{ display: 'flex', gap: '8px' }}>
-                    <button 
-                        disabled={currentPage <= 1} 
-                        onClick={() => setCurrentPage(currentPage - 1)}
-                        style={currentPage <= 1 ? styles.pageBtnDisabled : styles.pageBtn}
-                    >
-                        Previous
-                    </button>
+                    <button disabled={currentPage <= 1} onClick={() => setCurrentPage(currentPage - 1)} style={currentPage <= 1 ? styles.pageBtnDisabled : styles.pageBtn}>Previous</button>
                     <span style={{ fontSize: '0.85rem', padding: '6px 0', color: '#4b5563' }}>Page {currentPage} of {totalPages}</span>
-                    <button 
-                        disabled={currentPage >= totalPages} 
-                        onClick={() => setCurrentPage(currentPage + 1)}
-                        style={currentPage >= totalPages ? styles.pageBtnDisabled : styles.pageBtn}
-                    >
-                        Next
-                    </button>
+                    <button disabled={currentPage >= totalPages} onClick={() => setCurrentPage(currentPage + 1)} style={currentPage >= totalPages ? styles.pageBtnDisabled : styles.pageBtn}>Next</button>
                 </div>
             </div>
         );
     };
 
     // ==========================================
-    // RENDERERS (REMOVED LOCAL .slice())
+    // RENDERERS
     // ==========================================
     const renderRunsTab = () => {
         return (
@@ -300,15 +301,9 @@ const AutomationConsole = () => {
                                 <tr key={run.id} style={styles.tr}>
                                     <td style={styles.td}>#{run.id}</td>
                                     <td style={styles.td}><strong>{run.job_name || `Job ID: ${run.job}`}</strong></td>
-                                    <td style={styles.td}>
-                                        <span style={run.status === 'successful' ? styles.badgeActive : run.status === 'failed' ? styles.badgeInactive : styles.badgeDark}>
-                                            {run.status ? run.status.toUpperCase() : 'UNKNOWN'}
-                                        </span>
-                                    </td>
+                                    <td style={styles.td}><span style={run.status === 'successful' ? styles.badgeActive : run.status === 'failed' ? styles.badgeInactive : styles.badgeDark}>{run.status ? run.status.toUpperCase() : 'UNKNOWN'}</span></td>
                                     <td style={styles.td}>{run.finished_at ? new Date(run.finished_at).toLocaleString() : 'Running...'}</td>
-                                    <td style={{...styles.td, textAlign: 'right'}}>
-                                        <button onClick={() => { setSelectedRun(run); setShowRunModal(true); }} style={styles.btnSecondary}>View Output</button>
-                                    </td>
+                                    <td style={{...styles.td, textAlign: 'right'}}><button onClick={() => { setSelectedRun(run); setShowRunModal(true); }} style={styles.btnSecondary}>View Output</button></td>
                                 </tr>
                             ))}
                             {runs.length === 0 && <tr><td colSpan="5" style={{...styles.td, textAlign:'center'}}>No runs recorded yet.</td></tr>}
@@ -325,7 +320,7 @@ const AutomationConsole = () => {
             <div>
                 <div style={styles.headerRow}>
                     <h2 style={styles.sectionTitle}>Scheduled Jobs</h2>
-                    <button style={styles.btnPrimary} onClick={() => { setJobForm({ id: null, name: '', playbook: '', environment: '', credential: '', targets: [], cron_schedule: '* * * * *', start_time: '', end_time: '', is_active: true }); setShowJobModal(true); }}>
+                    <button style={styles.btnPrimary} onClick={() => { setJobForm({ id: null, name: '', playbook: '', environment: '', credential: '', targets: [], target_groups: [], cron_schedule: '* * * * *', start_time: '', end_time: '', is_active: true }); setShowJobModal(true); }}>
                         <Plus size={16} /> Create Job
                     </button>
                 </div>
@@ -344,13 +339,11 @@ const AutomationConsole = () => {
                                 <tr key={job.id} style={styles.tr}>
                                     <td style={styles.td}><strong>{job.name}</strong></td>
                                     <td style={styles.td}>{job.cron_schedule || 'Manual'}</td>
-                                    <td style={styles.td}>
-                                        <span style={job.is_active ? styles.badgeActive : styles.badgeInactive}>{job.is_active ? 'Active' : 'Disabled'}</span>
-                                    </td>
+                                    <td style={styles.td}><span style={job.is_active ? styles.badgeActive : styles.badgeInactive}>{job.is_active ? 'Active' : 'Disabled'}</span></td>
                                     <td style={{...styles.td, textAlign: 'right', display: 'flex', justifyContent: 'flex-end', gap: '10px'}}>
                                         <button onClick={() => handleRunJob(job.id)} disabled={!job.is_active || runStatus === 'running'} style={styles.btnGreen}><Play size={14}/> Run</button>
                                         <button onClick={() => openEditJob(job)} style={styles.iconBtn}><Edit2 size={16} color="#4b5563"/></button>
-                                        <button onClick={() => handleDelete('jobs', job.id, fetchJobs)} style={styles.iconBtn}><Trash2 size={16} color="#ef4444"/></button>
+                                        <button onClick={() => handleDelete('/automation/jobs', job.id, fetchJobs)} style={styles.iconBtn}><Trash2 size={16} color="#ef4444"/></button>
                                     </td>
                                 </tr>
                             ))}
@@ -380,14 +373,36 @@ const AutomationConsole = () => {
             <div>
                 <div style={styles.headerRow}>
                     <h2 style={styles.sectionTitle}>Inventory Groups</h2>
-                    <button style={styles.btnPrimary} disabled><Plus size={16} /> Create Group</button>
+                    <button style={styles.btnPrimary} onClick={() => { setGroupForm({ id: null, organization: '', name: '', description: '', devices: [] }); setShowGroupModal(true); }}>
+                        <Plus size={16} /> Create Group
+                    </button>
                 </div>
                 <div style={styles.card}>
-                    <div style={{ padding: '40px', textAlign: 'center', color: '#6b7280' }}>
-                        <Layers size={48} style={{ margin: '0 auto 16px', color: '#9ca3af' }} />
-                        <h3>Coming in Phase 2</h3>
-                        <p>We need to create the Django Backend Models for "Groups" before we can build them here.</p>
-                    </div>
+                    <table style={styles.table}>
+                        <thead style={styles.th}>
+                            <tr>
+                                <th style={styles.thItem}>Group Name</th>
+                                <th style={styles.thItem}>Description</th>
+                                <th style={styles.thItem}>Devices Count</th>
+                                <th style={{...styles.thItem, textAlign: 'right'}}>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {groups.map(g => (
+                                <tr key={g.id} style={styles.tr}>
+                                    <td style={styles.td}><div style={{display:'flex', alignItems:'center', gap:'8px'}}><Layers size={16} color="#3b82f6"/> <strong>{g.name}</strong></div></td>
+                                    <td style={styles.td}>{g.description || '--'}</td>
+                                    <td style={styles.td}><span style={styles.badgeDark}>{g.devices?.length || 0} Devices</span></td>
+                                    <td style={{...styles.td, textAlign: 'right'}}>
+                                        <button onClick={() => openEditGroup(g)} style={styles.iconBtn}><Edit2 size={16} color="#4b5563"/></button>
+                                        <button onClick={() => handleDelete('/core/groups', g.id, fetchGroups)} style={styles.iconBtn}><Trash2 size={16} color="#ef4444"/></button>
+                                    </td>
+                                </tr>
+                            ))}
+                            {groups.length === 0 && <tr><td colSpan="4" style={{...styles.td, textAlign:'center'}}>No groups created yet.</td></tr>}
+                        </tbody>
+                    </table>
+                    {renderPagination(totalCounts.groups)}
                 </div>
             </div>
         );
@@ -420,7 +435,7 @@ const AutomationConsole = () => {
                                     <td style={styles.td}>{new Date(pb.updated_at).toLocaleDateString()}</td>
                                     <td style={{...styles.td, textAlign: 'right'}}>
                                         <button onClick={() => openEditPlaybook(pb)} style={styles.iconBtn}><Edit2 size={16} color="#4b5563"/></button>
-                                        <button onClick={() => handleDelete('playbooks', pb.id, fetchPlaybooks)} style={styles.iconBtn}><Trash2 size={16} color="#ef4444"/></button>
+                                        <button onClick={() => handleDelete('/automation/playbooks', pb.id, fetchPlaybooks)} style={styles.iconBtn}><Trash2 size={16} color="#ef4444"/></button>
                                     </td>
                                 </tr>
                             ))}
@@ -460,7 +475,7 @@ const AutomationConsole = () => {
                                     <td style={styles.td}>{c.username || '--'}</td>
                                     <td style={{...styles.td, textAlign: 'right'}}>
                                         <button onClick={() => openEditCred(c)} style={styles.iconBtn}><Edit2 size={16} color="#4b5563"/></button>
-                                        <button onClick={() => handleDelete('credentials', c.id, fetchCredentials)} style={styles.iconBtn}><Trash2 size={16} color="#ef4444"/></button>
+                                        <button onClick={() => handleDelete('/automation/credentials', c.id, fetchCredentials)} style={styles.iconBtn}><Trash2 size={16} color="#ef4444"/></button>
                                     </td>
                                 </tr>
                             ))}
@@ -496,7 +511,7 @@ const AutomationConsole = () => {
                                     <td style={styles.td}><div style={{display:'flex', alignItems:'center', gap:'8px'}}><Box size={16} color="#9333ea"/> <strong>{e.name}</strong></div></td>
                                     <td style={{...styles.td, textAlign: 'right'}}>
                                         <button onClick={() => openEditEnv(e)} style={styles.iconBtn}><Edit2 size={16} color="#4b5563"/></button>
-                                        <button onClick={() => handleDelete('environments', e.id, fetchEnvironments)} style={styles.iconBtn}><Trash2 size={16} color="#ef4444"/></button>
+                                        <button onClick={() => handleDelete('/automation/environments', e.id, fetchEnvironments)} style={styles.iconBtn}><Trash2 size={16} color="#ef4444"/></button>
                                     </td>
                                 </tr>
                             ))}
@@ -536,7 +551,6 @@ const AutomationConsole = () => {
             {/* MODALS */}
             {/* ========================================== */}
             
-            {/* RUN LOGS TERMINAL MODAL */}
             {showRunModal && selectedRun && (
                 <div style={styles.modalOverlay}>
                     <div style={{...styles.modalContentLarge, height: '70vh'}}>
@@ -554,52 +568,113 @@ const AutomationConsole = () => {
             {/* JOB MODAL */}
             {showJobModal && (
                 <div style={styles.modalOverlay}>
-                    <div style={{...styles.modalContentSmall, maxWidth: '600px'}}>
-                        <div style={styles.modalHeader}><h2>{jobForm.id ? 'Edit' : 'Create'} Job</h2><button onClick={() => setShowJobModal(false)} style={styles.closeBtn}><X size={20}/></button></div>
+                    {/* Wider modal for the 2-column layout */}
+                    <div style={{...styles.modalContentLarge, maxWidth: '900px', height: 'auto', maxHeight: '90vh'}}>
+                        <div style={styles.modalHeader}>
+                            <h2>{jobForm.id ? 'Edit' : 'Create'} Job</h2>
+                            <button onClick={() => setShowJobModal(false)} style={styles.closeBtn}><X size={20}/></button>
+                        </div>
+                        
+                        {/* 2-column flex layout */}
+                        <div style={{...styles.modalBody, display: 'flex', gap: '24px'}}>
+                            
+                            {/* LEFT COLUMN: Basic Settings */}
+                            <div style={{ flex: 1 }}>
+                                <label style={styles.label}>Job Name</label>
+                                <input style={styles.input} value={jobForm.name} onChange={e => setJobForm({...jobForm, name: e.target.value})} />
+                                
+                                <label style={styles.label}>Playbook</label>
+                                <select style={styles.input} value={jobForm.playbook} onChange={e => setJobForm({...jobForm, playbook: e.target.value})}>
+                                    <option value="">-- Select Playbook --</option>
+                                    {playbooks.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+                                </select>
+
+                                <label style={styles.label}>Environment</label>
+                                <select style={styles.input} value={jobForm.environment} onChange={e => setJobForm({...jobForm, environment: e.target.value})}>
+                                    <option value="">-- Select Environment --</option>
+                                    {environments.map(e => <option key={e.id} value={e.id}>{e.name}</option>)}
+                                </select>
+
+                                <label style={styles.label}>Vault Credential</label>
+                                <select style={styles.input} value={jobForm.credential} onChange={e => setJobForm({...jobForm, credential: e.target.value})}>
+                                    <option value="">-- Select Credential --</option>
+                                    {credentials.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                                </select>
+
+                                <label style={styles.label}>Target Groups (Hold CTRL/CMD to select multiple)</label>
+                                <select multiple style={{...styles.input, height: '120px', marginBottom: 0}} value={jobForm.target_groups} onChange={e => {
+                                    const options = [...e.target.selectedOptions];
+                                    setJobForm({...jobForm, target_groups: options.map(opt => opt.value)});
+                                }}>
+                                    {groups.map(g => (
+                                        <option key={g.id} value={g.id}>{g.name} ({g.devices?.length || 0} Devices)</option>
+                                    ))}
+                                </select>
+                            </div>
+
+                            {/* RIGHT COLUMN: Schedule & Individual Targets */}
+                            <div style={{ flex: 1 }}>
+                                <SchedulePicker 
+                                    cronString={jobForm.cron_schedule}
+                                    startTime={jobForm.start_time}
+                                    endTime={jobForm.end_time}
+                                    onChange={(cron, start, end) => setJobForm({...jobForm, cron_schedule: cron, start_time: start, end_time: end})} 
+                                />
+
+                                <label style={styles.label}>Individual Targets (Hold CTRL/CMD to select multiple)</label>
+                                <select multiple style={{...styles.input, height: '180px', marginBottom: 0}} value={jobForm.targets} onChange={e => {
+                                    const options = [...e.target.selectedOptions];
+                                    setJobForm({...jobForm, targets: options.map(opt => opt.value)});
+                                }}>
+                                    {devices.map(d => (
+                                        <option key={d.id} value={d.id}>
+                                            {d.name} — IP: {d.ip_address || 'N/A'}
+                                        </option>
+                                    ))}
+                                </select>
+                            </div>
+
+                        </div>
+                        <div style={styles.modalFooter}>
+                            <button style={styles.btnPrimary} onClick={() => handleSave('/automation/jobs', jobForm, fetchJobs, setShowJobModal, () => {})}>Save Job</button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* GROUP MODAL */}
+            {showGroupModal && (
+                <div style={styles.modalOverlay}>
+                    <div style={styles.modalContentSmall}>
+                        <div style={styles.modalHeader}><h2>{groupForm.id ? 'Edit' : 'Create'} Group</h2><button onClick={() => setShowGroupModal(false)} style={styles.closeBtn}><X size={20}/></button></div>
                         <div style={styles.modalBody}>
-                            <label style={styles.label}>Job Name</label>
-                            <input style={styles.input} value={jobForm.name} onChange={e => setJobForm({...jobForm, name: e.target.value})} />
                             
-                            <SchedulePicker 
-                                cronString={jobForm.cron_schedule}
-                                startTime={jobForm.start_time}
-                                endTime={jobForm.end_time}
-                                onChange={(cron, start, end) => setJobForm({...jobForm, cron_schedule: cron, start_time: start, end_time: end})} 
-                            />
+                            <label style={styles.label}>Organization</label>
+                            <select style={styles.input} value={groupForm.organization} onChange={e => setGroupForm({...groupForm, organization: e.target.value})}>
+                                <option value="">-- Select Organization --</option>
+                                {organizations.map(org => <option key={org.id} value={org.id}>{org.name}</option>)}
+                            </select>
+
+                            <label style={styles.label}>Group Name</label>
+                            <input style={styles.input} value={groupForm.name} onChange={e => setGroupForm({...groupForm, name: e.target.value})} />
                             
-                            <label style={styles.label}>Playbook</label>
-                            <select style={styles.input} value={jobForm.playbook} onChange={e => setJobForm({...jobForm, playbook: e.target.value})}>
-                                <option value="">-- Select Playbook --</option>
-                                {playbooks.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
-                            </select>
-
-                            <label style={styles.label}>Environment</label>
-                            <select style={styles.input} value={jobForm.environment} onChange={e => setJobForm({...jobForm, environment: e.target.value})}>
-                                <option value="">-- Select Environment --</option>
-                                {environments.map(e => <option key={e.id} value={e.id}>{e.name}</option>)}
-                            </select>
-
-                            <label style={styles.label}>Vault Credential</label>
-                            <select style={styles.input} value={jobForm.credential} onChange={e => setJobForm({...jobForm, credential: e.target.value})}>
-                                <option value="">-- Select Credential --</option>
-                                {credentials.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
-                            </select>
-
-                            <label style={styles.label}>Target Devices (Hold CTRL/CMD to select multiple)</label>
-                            <select multiple style={{...styles.input, height: '150px'}} value={jobForm.targets} onChange={e => {
+                            <label style={styles.label}>Description</label>
+                            <input style={styles.input} value={groupForm.description} onChange={e => setGroupForm({...groupForm, description: e.target.value})} />
+                            
+                            <label style={styles.label}>Assign Devices (Hold CTRL/CMD to select multiple)</label>
+                            <select multiple style={{...styles.input, height: '200px'}} value={groupForm.devices} onChange={e => {
                                 const options = [...e.target.selectedOptions];
-                                const values = options.map(option => option.value);
-                                setJobForm({...jobForm, targets: values});
+                                setGroupForm({...groupForm, devices: options.map(opt => opt.value)});
                             }}>
                                 {devices.map(d => (
                                     <option key={d.id} value={d.id}>
-                                        {d.name} — IP: {d.ip_address || 'N/A'} | Host: {d.hostname || 'N/A'}
+                                        {d.name} — IP: {d.ip_address || 'N/A'}
                                     </option>
                                 ))}
                             </select>
                         </div>
                         <div style={styles.modalFooter}>
-                            <button style={styles.btnPrimary} onClick={() => handleSave('jobs', jobForm, fetchJobs, setShowJobModal, () => {})}>Save Job</button>
+                            <button style={styles.btnPrimary} onClick={() => handleSave('/core/groups', groupForm, fetchGroups, setShowGroupModal, () => {})}>Save Group</button>
                         </div>
                     </div>
                 </div>
@@ -618,7 +693,7 @@ const AutomationConsole = () => {
                             <Editor height="100%" defaultLanguage="yaml" theme="vs-dark" value={playbookForm.yaml_content} onChange={(val) => setPlaybookForm({...playbookForm, yaml_content: val})} options={{minimap: {enabled:false}, fontSize:14}}/>
                         </div>
                         <div style={styles.modalFooter}>
-                            <button style={styles.btnPrimary} onClick={() => handleSave('playbooks', playbookForm, fetchPlaybooks, setShowPlaybookModal, () => {})}>Save Playbook</button>
+                            <button style={styles.btnPrimary} onClick={() => handleSave('/automation/playbooks', playbookForm, fetchPlaybooks, setShowPlaybookModal, () => {})}>Save Playbook</button>
                         </div>
                     </div>
                 </div>
@@ -663,7 +738,7 @@ const AutomationConsole = () => {
                             )}
                         </div>
                         <div style={styles.modalFooter}>
-                            <button style={styles.btnPrimary} onClick={() => handleSave('credentials', credForm, fetchCredentials, setShowCredModal, () => {})}>Encrypt & Save</button>
+                            <button style={styles.btnPrimary} onClick={() => handleSave('/automation/credentials', credForm, fetchCredentials, setShowCredModal, () => {})}>Encrypt & Save</button>
                         </div>
                     </div>
                 </div>
@@ -686,7 +761,7 @@ const AutomationConsole = () => {
                             <button style={styles.btnPrimary} onClick={() => {
                                 try {
                                     const payload = { ...envForm, collections_json: JSON.parse(envForm.collections_json), python_packages_json: JSON.parse(envForm.python_packages_json) };
-                                    handleSave('environments', payload, fetchEnvironments, setShowEnvModal, () => {});
+                                    handleSave('/automation/environments', payload, fetchEnvironments, setShowEnvModal, () => {});
                                 } catch (e) { alert("Invalid JSON format!"); }
                             }}>Save Environment</button>
                         </div>
