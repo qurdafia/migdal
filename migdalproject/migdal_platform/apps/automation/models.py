@@ -99,10 +99,10 @@ class AutomationJob(models.Model):
     credential = models.ForeignKey('Credential', on_delete=models.RESTRICT)
     
     # The dynamic inventory bridge mapping directly to Migdal's existing targets
-    targets = models.ManyToManyField(DataSource, related_name='targeted_jobs')
+    targets = models.ManyToManyField(DataSource, related_name='targeted_jobs', blank=True)
 
     target_groups = models.ManyToManyField(DeviceGroup, related_name='targeted_jobs', blank=True)
-    
+   
     # Scheduling (Using standard Cron syntax)
     cron_schedule = models.CharField(max_length=100, blank=True, null=True, help_text="e.g., '0 2 * * 0' for every Sunday at 2 AM")
     is_active = models.BooleanField(default=True)
