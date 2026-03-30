@@ -122,11 +122,10 @@ def execute_job_run(job_run_id):
         with open(playbook_path, 'w') as f:
             f.write(job.playbook.yaml_content)
 
-        # 🌟 BUILD DYNAMIC INVENTORY (Supports Individual Targets + Groups)
+        # Build Dynamic Inventory
         inventory_data = {
             "all": {
                 "hosts": {},
-                "children": {}, 
                 "vars": {
                     "ansible_user": credential.username,
                     "ansible_ssh_common_args": "-o StrictHostKeyChecking=no" 
@@ -146,27 +145,11 @@ def execute_job_run(job_run_id):
             inventory_data["all"]["vars"]["ansible_password"] = secret_value
             inventory_data["all"]["vars"]["ansible_become_password"] = secret_value
 
-        # 1. ADD INDIVIDUAL TARGETS
         for target in targets:
             target_ip = target.ip_address or target.hostname or "127.0.0.1" 
             inventory_data["all"]["hosts"][target.name] = {
                 "ansible_host": target_ip
             }
-
-        # 2. ADD TARGET GROUPS
-        for group in job.target_groups.all():
-            # Sanitize the group name for Ansible (e.g., "Web Servers" -> "web_servers")
-            group_name = group.name.replace(" ", "_").lower()
-            
-            # Initialize this group in the inventory dictionary
-            inventory_data["all"]["children"][group_name] = {"hosts": {}}
-            
-            # Inject all devices belonging to this group
-            for device in group.devices.all():
-                device_ip = device.ip_address or device.hostname or "127.0.0.1"
-                inventory_data["all"]["children"][group_name]["hosts"][device.name] = {
-                    "ansible_host": device_ip
-                }
 
         inventory_path = os.path.join(inventory_dir, 'hosts.json')
         with open(inventory_path, 'w') as f:
@@ -206,7 +189,6 @@ def execute_job_run(job_run_id):
         shutil.rmtree(temp_dir, ignore_errors=True)
 
     return run.status == 'successful'
-
 
 def trigger_job_async(job_run_id):
     thread = threading.Thread(target=execute_job_run, args=(job_run_id,))
