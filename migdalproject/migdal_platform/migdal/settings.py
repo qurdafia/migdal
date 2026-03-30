@@ -43,6 +43,7 @@ INSTALLED_APPS = [
     'apps.automation',
 
     'django_celery_beat',
+    'channels',
 ]
 
 MIDDLEWARE = [
@@ -57,6 +58,8 @@ MIDDLEWARE = [
 ]
 
 ROOT_URLCONF = 'migdal.urls'
+
+ASGI_APPLICATION = 'migdal.asgi.application'
 
 TEMPLATES = [
     {
@@ -183,9 +186,20 @@ LOGGING = {
 # Look for REDIS_URL in the environment (for Docker), otherwise default to localhost (for native Windows dev)
 REDIS_URL = os.environ.get('REDIS_URL', 'redis://localhost:6379/0')
 
+CHANNEL_LAYERS = {
+    'default': {
+        'BACKEND': 'channels_redis.core.RedisChannelLayer',
+        'CONFIG': {
+            "hosts": [REDIS_URL],
+        },
+    },
+}
+
 CELERY_BROKER_URL = REDIS_URL
 CELERY_RESULT_BACKEND = REDIS_URL
 CELERY_ACCEPT_CONTENT = ['application/json']
 CELERY_TASK_SERIALIZER = 'json'
 CELERY_RESULT_SERIALIZER = 'json'
 CELERY_TIMEZONE = TIME_ZONE  # Uses your Django timezone
+
+MIGDAL_BASE_URL = env('MIGDAL_BASE_URL', default='http://127.0.0.1:8000')

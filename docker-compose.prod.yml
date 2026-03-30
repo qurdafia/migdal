@@ -11,17 +11,19 @@ services:
       - .env.prod
     restart: always
 
-  # 🆕 THE MESSAGE BROKER
+  # THE MESSAGE BROKER (Used by Celery and Channels/WebSockets)
   redis:
     image: redis:7-alpine
     restart: always
     ports:
       - "6379:6379"
 
+  # THE DJANGO BACKEND
   web:
     build:
       context: ./migdalproject/migdal_platform
       dockerfile: Dockerfile
+    # Daphne and migrations are handled inside this script!
     command: /app/entrypoint.sh
     volumes:
       - static_volume:/app/static
@@ -33,12 +35,11 @@ services:
       - redis
     restart: always
 
-  # 🆕 THE BACKGROUND WORKER (Executes the Playbooks)
+  # THE BACKGROUND WORKER (Executes the Playbooks)
   celery_worker:
     build:
       context: ./migdalproject/migdal_platform
       dockerfile: Dockerfile
-    # 👇 FIX 1: Changed migdal_platform to migdal
     command: celery -A migdal worker -l info
     env_file:
       - .env.prod
@@ -47,12 +48,11 @@ services:
       - redis
     restart: always
 
-  # 🆕 THE SCHEDULER (Watches the Cron Strings)
+  # THE SCHEDULER (Watches the Cron Strings)
   celery_beat:
     build:
       context: ./migdalproject/migdal_platform
       dockerfile: Dockerfile
-    # 👇 FIX 2: Changed to migdal AND added the DatabaseScheduler flag!
     command: celery -A migdal beat -l info --scheduler django_celery_beat.schedulers:DatabaseScheduler
     env_file:
       - .env.prod
@@ -61,6 +61,7 @@ services:
       - redis
     restart: always
 
+  # THE REACT FRONTEND & REVERSE PROXY
   nginx:
     build:
       context: ./migdalproject/migdal_frontend

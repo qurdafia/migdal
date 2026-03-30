@@ -5,6 +5,7 @@ import json
 import threading
 import subprocess
 from django.utils import timezone
+from django.conf import settings
 from apps.automation.models import JobRun
 
 # 🛡️ OS-AWARE IMPORT
@@ -31,7 +32,6 @@ def setup_dynamic_environment(environment, temp_dir):
         if packages:
             setup_logs += f"Installing Python packages: {', '.join(packages)}...\n"
             try:
-                # Runs 'pip install pkg1 pkg2' silently
                 result = subprocess.run(['pip', 'install', '--quiet'] + packages, capture_output=True, text=True)
                 if result.returncode == 0:
                     setup_logs += "✅ Python packages installed successfully.\n"
@@ -46,7 +46,6 @@ def setup_dynamic_environment(environment, temp_dir):
         if collections:
             req_path = os.path.join(temp_dir, 'requirements.yml')
             
-            # Dynamically generate the requirements.yml file
             with open(req_path, 'w') as f:
                 f.write("---\ncollections:\n")
                 for col in collections:
@@ -60,7 +59,6 @@ def setup_dynamic_environment(environment, temp_dir):
             
             setup_logs += f"Installing Ansible collections...\n"
             try:
-                # Install collections directly into the runner's temporary project path
                 collections_path = os.path.join(temp_dir, 'collections')
                 result = subprocess.run(
                     ['ansible-galaxy', 'collection', 'install', '-r', req_path, '-p', collections_path],
@@ -122,14 +120,17 @@ def execute_job_run(job_run_id):
         with open(playbook_path, 'w') as f:
             f.write(job.playbook.yaml_content)
 
-        # 🌟 BUILD DYNAMIC INVENTORY (Supports Individual Targets + Groups)
+        # 🌟 BUILD DYNAMIC INVENTORY
+        migdal_host = getattr(settings, 'MIGDAL_BASE_URL', 'http://127.0.0.1:8000').rstrip('/')
+
         inventory_data = {
             "all": {
                 "hosts": {},
                 "children": {}, 
                 "vars": {
                     "ansible_user": credential.username,
-                    "ansible_ssh_common_args": "-o StrictHostKeyChecking=no" 
+                    "ansible_ssh_common_args": "-o StrictHostKeyChecking=no",
+                    "migdal_ingest_url": f"{migdal_host}/api/core/ingest/"
                 }
             }
         }
@@ -150,29 +151,27 @@ def execute_job_run(job_run_id):
         for target in targets:
             target_ip = target.ip_address or target.hostname or "127.0.0.1" 
             inventory_data["all"]["hosts"][target.name] = {
-                "ansible_host": target_ip
+                "ansible_host": target_ip,
+                "migdal_api_key": str(target.id)
             }
 
         # 2. ADD TARGET GROUPS
         for group in job.target_groups.all():
-            # Sanitize the group name for Ansible (e.g., "Web Servers" -> "web_servers")
             group_name = group.name.replace(" ", "_").lower()
-            
-            # Initialize this group in the inventory dictionary
             inventory_data["all"]["children"][group_name] = {"hosts": {}}
             
-            # Inject all devices belonging to this group
             for device in group.devices.all():
                 device_ip = device.ip_address or device.hostname or "127.0.0.1"
                 inventory_data["all"]["children"][group_name]["hosts"][device.name] = {
-                    "ansible_host": device_ip
+                    "ansible_host": device_ip,
+                    "migdal_api_key": str(device.id)
                 }
 
         inventory_path = os.path.join(inventory_dir, 'hosts.json')
         with open(inventory_path, 'w') as f:
             json.dump(inventory_data, f, indent=4)
         
-        # 🔗 THE MISSING LINK: Tell Ansible exactly where we installed the collections
+        # 🔗 Tell Ansible exactly where we installed the collections
         custom_env = os.environ.copy()
         custom_env['ANSIBLE_COLLECTIONS_PATH'] = os.path.join(temp_dir, 'collections')
 
@@ -181,7 +180,7 @@ def execute_job_run(job_run_id):
             private_data_dir=temp_dir,
             playbook='main.yml',
             quiet=True,
-            envvars=custom_env  # <-- Pass the environment variables here!
+            envvars=custom_env 
         )
 
         run.status = 'successful' if r.rc == 0 else 'failed'
